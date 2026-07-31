@@ -68,7 +68,7 @@ jobs:
     needs: changes
     if: needs.changes.outputs.should-run == 'true'
     # bump this SHA when osac-test-infra reusable workflows change
-    uses: osac-project/osac-test-infra/.github/workflows/e2e-vmaas-full-install.yml@5347598040856b07c61afed01b5b1e6f428c81d7
+    uses: osac-project/osac-test-infra/.github/workflows/e2e-vmaas-full-install.yml@56af8a0690f855dd7ebf6378372bdb1f9ad9fdfa
     with:
       test-suite: ${{ inputs.test-suite || 'vmaas' }}
       test-filter: ${{ inputs.test-filter || '' }}

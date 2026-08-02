@@ -3,9 +3,9 @@ module github.com/osac-project/osac-csi-driver
 go 1.26.3
 
 require (
-	github.com/container-storage-interface/spec v1.12.0
+	github.com/container-storage-interface/spec v1.13.0
 	github.com/kubernetes-csi/csi-test/v5 v5.5.0
-	google.golang.org/grpc v1.82.0
+	google.golang.org/grpc v1.83.0
 	google.golang.org/protobuf v1.36.11
 	k8s.io/klog/v2 v2.140.0
 )
@@ -27,6 +27,6 @@ require (
 	golang.org/x/sys v0.46.0 // indirect
 	golang.org/x/text v0.38.0 // indirect
 	golang.org/x/tools v0.45.0 // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20260414002931-afd174a4e478 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20260526163538-3dc84a4a5aaa // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 )

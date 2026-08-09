@@ -21,6 +21,7 @@ import (
 )
 
 // VolumeSpec defines the desired state of Volume.
+// +kubebuilder:validation:XValidation:rule="!has(oldSelf.pvcRef) || has(self.pvcRef)",message="pvcRef cannot be removed once set"
 type VolumeSpec struct {
 	// StorageTier is the name of the StorageTier that determines which backend
 	// and protocol serve this volume.

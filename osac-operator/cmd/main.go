@@ -82,6 +82,7 @@ const (
 	envNetworkingNamespace        = "OSAC_NETWORKING_NAMESPACE"
 	envClusterOrderNamespace      = "OSAC_CLUSTER_ORDER_NAMESPACE"
 	envBareMetalInstanceNamespace = "OSAC_BARE_METAL_INSTANCE_NAMESPACE"
+	envVolumeNamespace            = "OSAC_VOLUME_NAMESPACE"
 
 	// AAP configuration
 	envAAPURL                 = "OSAC_AAP_URL"
@@ -467,6 +468,37 @@ func setupStorageController(mgr mcmanager.Manager, grpcConn *grpc.ClientConn, ma
 	}
 	if err := reconciler.SetupWithManager(mgr); err != nil {
 		return fmt.Errorf("storage controller: %w", err)
+	}
+	return nil
+}
+
+// setupVolumeControllers registers the Volume resource controller and, when
+// grpcConn is set, the Volume feedback controller. The Volume controller uses
+// a VendorProvisioner interface instead of AAP; for now no real vendor is
+// configured (nil provisioner), so the controller sets Progressing and waits
+// for the vendor CSI integration in a follow-up PR.
+func setupVolumeControllers(mgr mcmanager.Manager, grpcConn *grpc.ClientConn) error {
+	localMgr := mgr.GetLocalManager()
+	volumeNamespace := os.Getenv(envVolumeNamespace)
+
+	if grpcConn != nil {
+		if err := controller.NewVolumeFeedbackReconciler(
+			localMgr.GetClient(),
+			grpcConn,
+			volumeNamespace,
+		).SetupWithManager(mgr); err != nil {
+			return fmt.Errorf("volume feedback controller: %w", err)
+		}
+	}
+
+	// VendorProvisioner is nil until the real vendor CSI client is wired.
+	// The controller will set phase to Progressing and skip provisioning.
+	if err := controller.NewVolumeReconciler(
+		mgr,
+		volumeNamespace,
+		nil,
+	).SetupWithManager(mgr); err != nil {
+		return fmt.Errorf("volume controller: %w", err)
 	}
 	return nil
 }
@@ -995,6 +1027,10 @@ func main() {
 	if ctrlFlags.Storage {
 		if err := setupStorageController(mgr, grpcConn, maxJobHistory); err != nil {
 			setupLog.Error(err, "unable to setup storage controller")
+			os.Exit(1)
+		}
+		if err := setupVolumeControllers(mgr, grpcConn); err != nil {
+			setupLog.Error(err, "unable to setup volume controllers")
 			os.Exit(1)
 		}
 	}

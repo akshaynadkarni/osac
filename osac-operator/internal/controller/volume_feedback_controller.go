@@ -43,6 +43,9 @@ type VolumeFeedbackReconciler struct {
 // CR status to the fulfillment-service. The volumeNamespace controls which
 // namespace this controller watches, matching the resource controller's scope.
 func NewVolumeFeedbackReconciler(hubClient clnt.Client, grpcConn *grpc.ClientConn, volumeNamespace string) *VolumeFeedbackReconciler {
+	if volumeNamespace == "" {
+		volumeNamespace = defaultVolumeNamespace
+	}
 	volClient := privatev1.NewVolumesClient(grpcConn)
 	r := &VolumeFeedbackReconciler{volumeNamespace: volumeNamespace}
 	r.bridge = &feedback.Bridge[*v1alpha1.Volume, *privatev1.Volume]{
@@ -161,6 +164,20 @@ func syncVolumeVendorFields(obj *v1alpha1.Volume, remote *privatev1.Volume) {
 		remote.GetStatus().SetBackend(obj.Status.Backend)
 	}
 	if obj.Status.Protocol != "" {
-		remote.GetStatus().SetProtocol(privatev1.StorageProtocol(privatev1.StorageProtocol_value[string(obj.Status.Protocol)]))
+		remote.GetStatus().SetProtocol(crdProtocolToProto(obj.Status.Protocol))
+	}
+}
+
+// crdProtocolToProto converts the CRD VolumeProtocol typed string (e.g.
+// "Block", "NFS") to the proto StorageProtocol enum. A direct map lookup
+// would fail because the proto keys are "STORAGE_PROTOCOL_BLOCK", not "Block".
+func crdProtocolToProto(protocol v1alpha1.VolumeProtocol) privatev1.StorageProtocol {
+	switch protocol {
+	case v1alpha1.VolumeProtocolBlock:
+		return privatev1.StorageProtocol_STORAGE_PROTOCOL_BLOCK
+	case v1alpha1.VolumeProtocolNFS:
+		return privatev1.StorageProtocol_STORAGE_PROTOCOL_NFS
+	default:
+		return privatev1.StorageProtocol_STORAGE_PROTOCOL_UNSPECIFIED
 	}
 }

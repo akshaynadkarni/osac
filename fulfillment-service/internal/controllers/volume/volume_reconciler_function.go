@@ -301,7 +301,7 @@ func (t *task) selectHub(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		if len(response.Items) == 0 {
+		if response == nil || len(response.Items) == 0 {
 			return errors.New("no hubs available")
 		}
 		t.hubId = response.Items[rand.IntN(len(response.Items))].GetId()

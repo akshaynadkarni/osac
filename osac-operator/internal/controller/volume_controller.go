@@ -20,6 +20,8 @@ import (
 	"context"
 
 	"k8s.io/apimachinery/pkg/api/equality"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/util/retry"
@@ -146,6 +148,14 @@ func (r *VolumeReconciler) Reconcile(ctx context.Context, req mcreconcile.Reques
 	if !equality.Semantic.DeepEqual(vol.Status, *oldStatus) {
 		log.Info("status requires update")
 		if statusErr := r.updateStatusWithRetry(ctx, client.ObjectKeyFromObject(vol), vol.Status); statusErr != nil {
+			// After handleDelete removes the finalizer, the API server may
+			// delete the object before we attempt the status update. This is
+			// expected and not an error: the status was already persisted as
+			// part of the finalizer-removal Update call.
+			if !vol.ObjectMeta.DeletionTimestamp.IsZero() && apierrors.IsNotFound(statusErr) {
+				log.Info("object deleted before status update, skipping")
+				return res, nil
+			}
 			return res, statusErr
 		}
 	}
@@ -177,6 +187,14 @@ func (r *VolumeReconciler) handleUpdate(ctx context.Context, vol *v1alpha1.Volum
 
 	// Already provisioned; nothing to do until spec changes (future: resize).
 	if vol.Status.Phase == v1alpha1.VolumePhaseReady {
+		return ctrl.Result{}, nil
+	}
+
+	// Failed volumes are not auto-retried to avoid spamming the vendor API
+	// with a persistent configuration error. The admin fixes the issue, then
+	// a Signal or periodic sync triggers re-reconciliation. At that point the
+	// phase is reset to Progressing below so provisioning is attempted again.
+	if vol.Status.Phase == v1alpha1.VolumePhaseFailed {
 		return ctrl.Result{}, nil
 	}
 
@@ -292,24 +310,15 @@ func (r *VolumeReconciler) SetupWithManager(mgr mcmanager.Manager) error {
 		Complete(r)
 }
 
-// setVendorProvisionedCondition upserts the VendorProvisioned condition,
-// preserving the last transition time when the status hasn't changed.
+// setVendorProvisionedCondition upserts the VendorProvisioned condition.
+// Uses apimeta.SetStatusCondition which preserves LastTransitionTime when
+// the status hasn't changed, but always updates Reason and Message so
+// repeated failures reflect the latest error.
 func setVendorProvisionedCondition(conditions *[]metav1.Condition, status metav1.ConditionStatus, reason, message string) {
-	condition := metav1.Condition{
-		Type:               string(v1alpha1.VolumeConditionVendorProvisioned),
-		Status:             status,
-		LastTransitionTime: metav1.Now(),
-		Reason:             reason,
-		Message:            message,
-	}
-
-	for i, c := range *conditions {
-		if c.Type == condition.Type {
-			if c.Status != condition.Status {
-				(*conditions)[i] = condition
-			}
-			return
-		}
-	}
-	*conditions = append(*conditions, condition)
+	apimeta.SetStatusCondition(conditions, metav1.Condition{
+		Type:    string(v1alpha1.VolumeConditionVendorProvisioned),
+		Status:  status,
+		Reason:  reason,
+		Message: message,
+	})
 }

@@ -178,6 +178,25 @@ var _ = Describe("VolumeFeedbackController", func() {
 			updated := mockServer.updates[0]
 			Expect(updated.GetStatus().GetVendorVolumeId()).To(Equal("netapp-vol-42"))
 			Expect(updated.GetStatus().GetBackend()).To(Equal("netapp-cluster-1"))
+			Expect(updated.GetStatus().GetProtocol()).To(Equal(privatev1.StorageProtocol_STORAGE_PROTOCOL_NFS))
+		})
+
+		It("should map Block protocol correctly", func() {
+			mockServer.addVolume(newRemoteVolume(volID, privatev1.VolumeState_VOLUME_STATE_CREATING))
+
+			cr := newVolumeFeedbackCR(volName, volNamespace, volID, v1alpha1.VolumePhaseReady, nil)
+			cr.Status.VendorVolumeID = "vast-001"
+			cr.Status.Backend = "vast-backend"
+			cr.Status.Protocol = v1alpha1.VolumeProtocolBlock
+			Expect(fakeK8s.Create(ctx, cr)).To(Succeed())
+
+			_, err := reconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: types.NamespacedName{Name: volName, Namespace: volNamespace},
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			Expect(mockServer.updates).To(HaveLen(1))
+			Expect(mockServer.updates[0].GetStatus().GetProtocol()).To(Equal(privatev1.StorageProtocol_STORAGE_PROTOCOL_BLOCK))
 		})
 
 		It("should not overwrite remote fields when CR fields are empty", func() {

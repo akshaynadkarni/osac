@@ -51,6 +51,26 @@ var _ = DescribeMigration("Create volumes tables", func() {
 		Entry("volumes", "volumes"),
 	)
 
+	It("Creates the archived_volumes table", func(ctx context.Context) {
+		err := tool.Migrate(ctx, 95)
+		Expect(err).ToNot(HaveOccurred())
+
+		_, err = conn.Exec(ctx,
+			`insert into archived_volumes (id, tenant, creation_timestamp, deletion_timestamp, data)
+			 values ($1, $2, now(), now(), $3)`,
+			"test-id", "system", `{}`,
+		)
+		Expect(err).ToNot(HaveOccurred())
+
+		var count int
+		err = conn.QueryRow(ctx,
+			`select count(*) from archived_volumes where id = $1`,
+			"test-id",
+		).Scan(&count)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(count).To(Equal(1))
+	})
+
 	It("Rejects invalid tenant reference", func(ctx context.Context) {
 		err := tool.Migrate(ctx, 95)
 		Expect(err).ToNot(HaveOccurred())
@@ -159,6 +179,14 @@ var _ = DescribeMigration("Create volumes tables", func() {
 		_, err = conn.Exec(ctx,
 			`update volumes set tenant = $1 where id = $2`,
 			"other-tenant", "immutable-id",
+		)
+		Expect(err).To(HaveOccurred())
+		Expect(errors.As(err, &pgErr)).To(BeTrue())
+		Expect(pgErr.Code).To(Equal("Z0001"))
+
+		_, err = conn.Exec(ctx,
+			`update volumes set project = $1 where id = $2`,
+			"other-project", "immutable-id",
 		)
 		Expect(err).To(HaveOccurred())
 		Expect(errors.As(err, &pgErr)).To(BeTrue())

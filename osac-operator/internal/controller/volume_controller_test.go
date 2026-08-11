@@ -86,7 +86,7 @@ var _ = Describe("VolumeReconciler", func() {
 
 		updated := &osacv1alpha1.Volume{}
 		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: vol.Name, Namespace: vol.Namespace}, updated)).To(Succeed())
-		Expect(updated.Finalizers).To(ContainElement(osacv1alpha1.VolumeFinalizer))
+		Expect(updated.Finalizers).To(ContainElement(osacVolumeFinalizer))
 	})
 
 	It("should set phase to Progressing on first reconcile", func() {

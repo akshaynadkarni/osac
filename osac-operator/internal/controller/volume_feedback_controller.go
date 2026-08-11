@@ -50,8 +50,8 @@ func NewVolumeFeedbackReconciler(hubClient clnt.Client, grpcConn *grpc.ClientCon
 	r := &VolumeFeedbackReconciler{volumeNamespace: volumeNamespace}
 	r.bridge = &feedback.Bridge[*v1alpha1.Volume, *privatev1.Volume]{
 		Client:    hubClient,
-		Finalizer: v1alpha1.VolumeFeedbackFinalizer,
-		IDLabel:   v1alpha1.VolumeLabelUUID,
+		Finalizer: osacVolumeFeedbackFinalizer,
+		IDLabel:   osacVolumeIDLabel,
 		Kind:      "Volume",
 		IDKey:     "volumeID",
 		NewObject: func() *v1alpha1.Volume { return &v1alpha1.Volume{} },

@@ -123,7 +123,7 @@ var _ = Describe("VolumeFeedbackController", func() {
 
 			updatedCR := &v1alpha1.Volume{}
 			Expect(fakeK8s.Get(ctx, types.NamespacedName{Name: volName, Namespace: volNamespace}, updatedCR)).To(Succeed())
-			Expect(controllerutil.ContainsFinalizer(updatedCR, v1alpha1.VolumeFeedbackFinalizer)).To(BeTrue())
+			Expect(controllerutil.ContainsFinalizer(updatedCR, osacVolumeFeedbackFinalizer)).To(BeTrue())
 		})
 
 		It("should sync Phase=Progressing to state=CREATING", func() {
@@ -252,7 +252,7 @@ var _ = Describe("VolumeFeedbackController", func() {
 			mockServer.addVolume(newRemoteVolume(volID, privatev1.VolumeState_VOLUME_STATE_AVAILABLE))
 
 			cr := newVolumeFeedbackCR(volName, volNamespace, volID, v1alpha1.VolumePhaseDeleting,
-				[]string{v1alpha1.VolumeFeedbackFinalizer, v1alpha1.VolumeFinalizer})
+				[]string{osacVolumeFeedbackFinalizer, osacVolumeFinalizer})
 			Expect(fakeK8s.Create(ctx, cr)).To(Succeed())
 			Expect(fakeK8s.Delete(ctx, cr)).To(Succeed())
 
@@ -270,14 +270,14 @@ var _ = Describe("VolumeFeedbackController", func() {
 			// Feedback finalizer should remain (other finalizers still present)
 			updatedCR := &v1alpha1.Volume{}
 			Expect(fakeK8s.Get(ctx, types.NamespacedName{Name: volName, Namespace: volNamespace}, updatedCR)).To(Succeed())
-			Expect(controllerutil.ContainsFinalizer(updatedCR, v1alpha1.VolumeFeedbackFinalizer)).To(BeTrue())
+			Expect(controllerutil.ContainsFinalizer(updatedCR, osacVolumeFeedbackFinalizer)).To(BeTrue())
 		})
 
 		It("should sync Phase=Failed to state=FAILED during deletion", func() {
 			mockServer.addVolume(newRemoteVolume(volID, privatev1.VolumeState_VOLUME_STATE_AVAILABLE))
 
 			cr := newVolumeFeedbackCR(volName, volNamespace, volID, v1alpha1.VolumePhaseFailed,
-				[]string{v1alpha1.VolumeFeedbackFinalizer, v1alpha1.VolumeFinalizer})
+				[]string{osacVolumeFeedbackFinalizer, osacVolumeFinalizer})
 			Expect(fakeK8s.Create(ctx, cr)).To(Succeed())
 			Expect(fakeK8s.Delete(ctx, cr)).To(Succeed())
 
@@ -294,7 +294,7 @@ var _ = Describe("VolumeFeedbackController", func() {
 			mockServer.addVolume(newRemoteVolume(volID, privatev1.VolumeState_VOLUME_STATE_AVAILABLE))
 
 			cr := newVolumeFeedbackCR(volName, volNamespace, volID, v1alpha1.VolumePhaseDeleting,
-				[]string{v1alpha1.VolumeFeedbackFinalizer})
+				[]string{osacVolumeFeedbackFinalizer})
 			Expect(fakeK8s.Create(ctx, cr)).To(Succeed())
 			Expect(fakeK8s.Delete(ctx, cr)).To(Succeed())
 
@@ -319,7 +319,7 @@ var _ = Describe("VolumeFeedbackController", func() {
 			mockServer.signalErr = fmt.Errorf("signal unavailable")
 
 			cr := newVolumeFeedbackCR(volName, volNamespace, volID, v1alpha1.VolumePhaseDeleting,
-				[]string{v1alpha1.VolumeFeedbackFinalizer})
+				[]string{osacVolumeFeedbackFinalizer})
 			Expect(fakeK8s.Create(ctx, cr)).To(Succeed())
 			Expect(fakeK8s.Delete(ctx, cr)).To(Succeed())
 
@@ -337,7 +337,7 @@ var _ = Describe("VolumeFeedbackController", func() {
 		It("should remove feedback finalizer when remote record is NotFound during deletion", func() {
 			// Don't add volume to mock server (simulates archived record)
 			cr := newVolumeFeedbackCR(volName, volNamespace, volID, v1alpha1.VolumePhaseDeleting,
-				[]string{v1alpha1.VolumeFeedbackFinalizer})
+				[]string{osacVolumeFeedbackFinalizer})
 			Expect(fakeK8s.Create(ctx, cr)).To(Succeed())
 			Expect(fakeK8s.Delete(ctx, cr)).To(Succeed())
 
@@ -367,7 +367,7 @@ var _ = Describe("VolumeFeedbackController", func() {
 			cr.Status.VendorVolumeID = "vast-001"
 			cr.Status.Backend = "vast-backend"
 			// Pre-seed the feedback finalizer so the reconciler doesn't add it (which triggers an update)
-			cr.Finalizers = []string{v1alpha1.VolumeFeedbackFinalizer}
+			cr.Finalizers = []string{osacVolumeFeedbackFinalizer}
 			Expect(fakeK8s.Create(ctx, cr)).To(Succeed())
 
 			_, err := reconciler.Reconcile(ctx, reconcile.Request{
@@ -388,7 +388,7 @@ func newVolumeFeedbackCR(name, namespace, id string, phase v1alpha1.VolumePhaseT
 			Name:      name,
 			Namespace: namespace,
 			Labels: map[string]string{
-				v1alpha1.VolumeLabelUUID: id,
+				osacVolumeIDLabel: id,
 			},
 		},
 		Spec: v1alpha1.VolumeSpec{

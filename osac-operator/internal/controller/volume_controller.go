@@ -170,7 +170,7 @@ func (r *VolumeReconciler) Reconcile(ctx context.Context, req mcreconcile.Reques
 func (r *VolumeReconciler) handleUpdate(ctx context.Context, vol *v1alpha1.Volume) (ctrl.Result, error) {
 	log := ctrllog.FromContext(ctx)
 
-	if controllerutil.AddFinalizer(vol, v1alpha1.VolumeFinalizer) {
+	if controllerutil.AddFinalizer(vol, osacVolumeFinalizer) {
 		if err := r.Update(ctx, vol); err != nil {
 			return ctrl.Result{}, err
 		}
@@ -247,7 +247,7 @@ func (r *VolumeReconciler) handleDelete(ctx context.Context, vol *v1alpha1.Volum
 
 	vol.Status.Phase = v1alpha1.VolumePhaseDeleting
 
-	if !controllerutil.ContainsFinalizer(vol, v1alpha1.VolumeFinalizer) {
+	if !controllerutil.ContainsFinalizer(vol, osacVolumeFinalizer) {
 		return ctrl.Result{}, nil
 	}
 
@@ -265,7 +265,7 @@ func (r *VolumeReconciler) handleDelete(ctx context.Context, vol *v1alpha1.Volum
 		log.Info("vendor deprovisioning succeeded", "vendorVolumeID", vol.Status.VendorVolumeID)
 	}
 
-	if controllerutil.RemoveFinalizer(vol, v1alpha1.VolumeFinalizer) {
+	if controllerutil.RemoveFinalizer(vol, osacVolumeFinalizer) {
 		if err := r.mgr.GetLocalManager().GetClient().Update(ctx, vol); err != nil {
 			return ctrl.Result{}, err
 		}

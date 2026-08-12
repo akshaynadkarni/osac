@@ -47,10 +47,10 @@ func NewMockVendorProvisioner() *MockVendorProvisioner {
 // "mock-" plus a monotonic counter. Backend and protocol are fixed
 // strings suitable for test assertions.
 func (m *MockVendorProvisioner) CreateVolume(_ context.Context, req VendorCreateVolumeRequest) (VendorCreateVolumeResponse, error) {
+	n := m.createCount.Add(1)
 	if m.CreateErr != nil {
 		return VendorCreateVolumeResponse{}, m.CreateErr
 	}
-	n := m.createCount.Add(1)
 	return VendorCreateVolumeResponse{
 		VendorVolumeID: fmt.Sprintf("mock-%d", n),
 		Backend:        "mock-backend",

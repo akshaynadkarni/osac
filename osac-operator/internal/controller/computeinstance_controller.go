@@ -599,17 +599,17 @@ func (r *ComputeInstanceReconciler) handleUpdate(ctx context.Context, _ reconcil
 		tenantName := tenant.GetName()
 		resolution, err := getTenantStorageClasses(ctx, targetClient, tenantName)
 		if err != nil {
-			log.Error(err, "failed to resolve tenant storage classes from target cluster, proceeding without them", "tenant", tenantName)
+			return ctrl.Result{}, fmt.Errorf("resolve tenant storage classes from target cluster for tenant %s: %w", tenantName, err)
+		}
+
+		for _, msg := range resolution.duplicateMessages {
+			r.Recorder.Eventf(instance, nil, corev1.EventTypeWarning, eventReasonDuplicateStorageClass, eventActionReconcile, "%s", msg)
+		}
+		if len(resolution.resolved) > 0 {
+			log.Info("resolved tenant storage classes from target cluster (status was empty)", "tenant", tenantName, "storageClasses", resolution.resolved)
+			ctx = provisioning.WithTenantStorageClasses(ctx, resolution.resolved)
 		} else {
-			for _, msg := range resolution.duplicateMessages {
-				r.Recorder.Eventf(instance, nil, corev1.EventTypeWarning, eventReasonDuplicateStorageClass, eventActionDetectDuplicate, "%s", msg)
-			}
-			if len(resolution.resolved) > 0 {
-				log.Info("resolved tenant storage classes from target cluster (status was empty)", "tenant", tenantName, "storageClasses", resolution.resolved)
-				ctx = provisioning.WithTenantStorageClasses(ctx, resolution.resolved)
-			} else {
-				log.Info("no tenant storage classes resolved from target cluster", "tenant", tenantName)
-			}
+			log.Info("no tenant storage classes resolved from target cluster", "tenant", tenantName)
 		}
 	}
 

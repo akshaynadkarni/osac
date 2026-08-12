@@ -600,7 +600,7 @@ func (r *ComputeInstanceReconciler) handleUpdate(ctx context.Context, _ reconcil
 		tenantName := tenant.GetName()
 		resolution, err := getTenantStorageClasses(ctx, targetClient, tenantName)
 		if err != nil {
-			return ctrl.Result{}, fmt.Errorf("resolve tenant storage classes from target cluster for tenant %s: %w", tenantName, err)
+			return ctrl.Result{}, fmt.Errorf("failed to resolve tenant storage classes from target cluster for tenant %s: %w", tenantName, err)
 		}
 
 		for _, msg := range resolution.duplicateMessages {

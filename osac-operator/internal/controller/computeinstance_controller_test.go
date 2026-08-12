@@ -1728,6 +1728,54 @@ var _ = Describe("ComputeInstance Controller", func() {
 			Expect(gotSCs[0].Name).To(Equal("ceph-fast"))
 			Expect(gotSCs[0].Tier).To(Equal("fast"))
 		})
+
+		It("should exclude ambiguous tiers when multiple SCs share the same tenant and tier labels", func() {
+			const resourceName = "test-sc-fallback-ambiguous"
+			const tenantName = "tenant-sc-fallback-ambiguous"
+			DeferCleanup(func() {
+				deleteCI(resourceName)
+				deleteTenantInNamespace(ctx, namespaceName, tenantName)
+			})
+
+			createLabeledStorageClass(ctx, "sc-ambig-a", tenantName, "local")
+			createLabeledStorageClass(ctx, "sc-ambig-b", tenantName, "local")
+
+			createReadyTenant(ctx, namespaceName, tenantName)
+
+			var gotSCs []osacv1alpha1.ResolvedStorageClass
+			var sawSCs bool
+			provider := &mockProvisioningProvider{
+				name: "aap",
+				triggerProvisionFunc: func(ctx context.Context, resource client.Object) (*provisioning.ProvisionResult, error) {
+					gotSCs = provisioning.TenantStorageClassesFromContext(ctx)
+					sawSCs = true
+					return &provisioning.ProvisionResult{JobID: "mock-job-id", InitialState: osacv1alpha1.JobStatePending}, nil
+				},
+			}
+
+			nn := types.NamespacedName{Name: resourceName, Namespace: namespaceName}
+			resource := &osacv1alpha1.ComputeInstance{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      resourceName,
+					Namespace: namespaceName,
+					Annotations: map[string]string{
+						osacTenantKey: tenantName,
+					},
+				},
+				Spec: newTestComputeInstanceSpec("test_template"),
+			}
+			Expect(k8sClient.Create(ctx, resource)).To(Succeed())
+
+			reconciler := NewComputeInstanceReconciler(testMcManager, "", namespaceName, "", provider, 100*time.Millisecond, 0, mcmanager.LocalCluster)
+			Eventually(func() error {
+				return reconciler.Client.Get(ctx, nn, &osacv1alpha1.ComputeInstance{})
+			}, 2*time.Second, 10*time.Millisecond).Should(Succeed())
+
+			_, err := reconciler.Reconcile(ctx, mcreconcile.Request{Request: reconcile.Request{NamespacedName: nn}})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(sawSCs).To(BeTrue())
+			Expect(gotSCs).To(BeNil(), "ambiguous tier should not be injected")
+		})
 	})
 
 	Context("handleKubeVirtVM", func() {

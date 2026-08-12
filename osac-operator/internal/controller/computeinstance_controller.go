@@ -602,6 +602,9 @@ func (r *ComputeInstanceReconciler) handleUpdate(ctx context.Context, _ reconcil
 			log.Error(err, "failed to resolve tenant storage classes from target cluster", "tenant", tenantName)
 			return ctrl.Result{}, err
 		}
+		for _, msg := range resolution.duplicateMessages {
+			r.Recorder.Eventf(instance, nil, corev1.EventTypeWarning, eventReasonDuplicateStorageClass, eventActionDetectDuplicate, "%s", msg)
+		}
 		if len(resolution.resolved) > 0 {
 			log.Info("resolved tenant storage classes from target cluster (status was empty)", "tenant", tenantName, "storageClasses", resolution.resolved)
 			ctx = provisioning.WithTenantStorageClasses(ctx, resolution.resolved)

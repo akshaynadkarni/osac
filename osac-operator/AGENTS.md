@@ -70,7 +70,7 @@ make check-helm-crds          # Verify CRD sync (CI enforces)
 
 Each resource has a **resource controller** (provisions via AAP, manages finalizers) and a **feedback controller** (syncs state to fulfillment-service via gRPC). See `.claude/rules/controller-patterns.md` for reconciliation, finalizer, and AAP integration patterns.
 
-`internal/controller/storage_controller.go` (`StorageReconciler`) is an exception to this pattern: it reconciles `Tenant` resources to provision/deprovision tenant storage (StorageClass discovery, CaaS backend and cluster storage lifecycle) rather than owning its own CRD or following the AAP-based provisioning flow.
+`internal/controller/storage_controller.go` (`StorageReconciler`) is an exception to this pattern: it reconciles `Tenant` resources to provision/deprovision tenant storage (StorageClass discovery, CaaS backend and cluster storage lifecycle) rather than owning its own CRD or following the AAP-based provisioning flow. When the StorageReconciler is disabled or has not yet populated `Tenant.status.storageClasses`, the `ComputeInstanceReconciler` falls back to resolving labeled StorageClasses directly from the target cluster (read-only, does not write back to Tenant status).
 
 ### Provisioning
 

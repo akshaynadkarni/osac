@@ -1766,7 +1766,9 @@ var _ = Describe("ComputeInstance Controller", func() {
 			}
 			Expect(k8sClient.Create(ctx, resource)).To(Succeed())
 
+			fakeRecorder := events.NewFakeRecorder(100)
 			reconciler := NewComputeInstanceReconciler(testMcManager, "", namespaceName, "", provider, 100*time.Millisecond, 0, mcmanager.LocalCluster)
+			reconciler.Recorder = fakeRecorder
 			Eventually(func() error {
 				return reconciler.Client.Get(ctx, nn, &osacv1alpha1.ComputeInstance{})
 			}, 2*time.Second, 10*time.Millisecond).Should(Succeed())
@@ -1775,6 +1777,10 @@ var _ = Describe("ComputeInstance Controller", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(sawSCs).To(BeTrue())
 			Expect(gotSCs).To(BeNil(), "ambiguous tier should not be injected")
+			Eventually(fakeRecorder.Events).Should(Receive(And(
+				ContainSubstring("Warning"),
+				ContainSubstring(eventReasonDuplicateStorageClass),
+			)))
 		})
 	})
 

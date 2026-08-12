@@ -604,14 +604,14 @@ func (r *ComputeInstanceReconciler) handleUpdate(ctx context.Context, _ reconcil
 		}
 
 		for _, msg := range resolution.duplicateMessages {
-			r.Recorder.Eventf(instance, nil, corev1.EventTypeWarning, eventReasonDuplicateStorageClass, eventActionReconcile, "%s", msg)
+			r.Recorder.Eventf(instance, nil, corev1.EventTypeWarning, eventReasonDuplicateStorageClass, eventActionDetectDuplicate, "%s", msg)
 		}
 		if len(resolution.resolved) > 0 {
 			log.Info("resolved tenant storage classes from target cluster (status was empty)", "tenant", tenantName, "storageClasses", resolution.resolved)
 			ctx = provisioning.WithTenantStorageClasses(ctx, resolution.resolved)
 		} else if len(resolution.ambiguousTiers) > 0 {
 			log.Info("no tenant storage classes resolved; all matched tiers are ambiguous (multiple StorageClasses per tier)", "tenant", tenantName, "ambiguousTiers", resolution.ambiguousTiers)
-			r.Recorder.Eventf(instance, nil, corev1.EventTypeWarning, eventReasonDuplicateStorageClass, eventActionReconcile,
+			r.Recorder.Eventf(instance, nil, corev1.EventTypeWarning, eventReasonDuplicateStorageClass, eventActionDetectDuplicate,
 				"no tenant storage classes resolved for tenant %s; all matched tiers are ambiguous — check StorageClass labels", tenantName)
 		} else {
 			log.Info("no tenant storage classes resolved from target cluster", "tenant", tenantName)

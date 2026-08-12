@@ -135,6 +135,22 @@ var _ = Describe("buildSpec", func() {
 		Expect(spec.AccessMode).To(Equal(osacv1alpha1.VolumeAccessModeReadWriteOncePod))
 	})
 
+	It("maps ReadOnlyMany access mode", func() {
+		t := &task{
+			volume: privatev1.Volume_builder{
+				Id: "vol-buildspec-rom",
+				Spec: privatev1.VolumeSpec_builder{
+					StorageTier: "silver",
+					SizeGib:     50,
+					AccessMode:  privatev1.VolumeAccessMode_VOLUME_ACCESS_MODE_READ_ONLY_MANY,
+				}.Build(),
+			}.Build(),
+		}
+
+		spec := t.buildSpec()
+		Expect(spec.AccessMode).To(Equal(osacv1alpha1.VolumeAccessModeReadOnlyMany))
+	})
+
 	It("includes PVC reference when present", func() {
 		t := &task{
 			volume: privatev1.Volume_builder{

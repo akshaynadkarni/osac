@@ -55,6 +55,7 @@ var _ = Describe("VolumeFeedbackController", func() {
 		reconciler *VolumeFeedbackReconciler
 		grpcServer *grpc.Server
 		listener   *bufconn.Listener
+		grpcConn   *grpc.ClientConn
 	)
 
 	BeforeEach(func() {
@@ -77,7 +78,8 @@ var _ = Describe("VolumeFeedbackController", func() {
 			_ = grpcServer.Serve(listener)
 		}()
 
-		conn, err := grpc.NewClient("passthrough:///bufnet",
+		var err error
+		grpcConn, err = grpc.NewClient("passthrough:///bufnet",
 			grpc.WithContextDialer(func(ctx context.Context, s string) (net.Conn, error) {
 				return listener.Dial()
 			}),
@@ -85,10 +87,13 @@ var _ = Describe("VolumeFeedbackController", func() {
 		)
 		Expect(err).NotTo(HaveOccurred())
 
-		reconciler = NewVolumeFeedbackReconciler(fakeK8s, conn, volNamespace)
+		reconciler = NewVolumeFeedbackReconciler(fakeK8s, grpcConn, volNamespace)
 	})
 
 	AfterEach(func() {
+		if grpcConn != nil {
+			_ = grpcConn.Close()
+		}
 		if grpcServer != nil {
 			grpcServer.Stop()
 		}
@@ -213,9 +218,8 @@ var _ = Describe("VolumeFeedbackController", func() {
 			})
 			Expect(err).NotTo(HaveOccurred())
 
-			// Phase changed (CREATING -> CREATING is same so no update? Let me check)
-			// Actually CREATING -> CREATING would be no change. The remote was CREATING and CR is Progressing->CREATING.
-			// So no state change, no vendor field change -> no update.
+			// Progressing maps to CREATING, which the remote already reports, and the CR
+			// carries no vendor fields. Nothing changes, so no Update RPC is sent.
 			Expect(mockServer.updates).To(BeEmpty())
 		})
 	})

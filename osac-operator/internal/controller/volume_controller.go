@@ -135,7 +135,7 @@ func (r *VolumeReconciler) Reconcile(ctx context.Context, req mcreconcile.Reques
 
 	log.Info("start reconcile")
 
-	oldStatus := vol.Status.DeepCopy()
+	oldstatus := vol.Status.DeepCopy()
 
 	var res ctrl.Result
 	var err error
@@ -145,7 +145,7 @@ func (r *VolumeReconciler) Reconcile(ctx context.Context, req mcreconcile.Reques
 		res, err = r.handleDelete(ctx, vol)
 	}
 
-	if !equality.Semantic.DeepEqual(vol.Status, *oldStatus) {
+	if !equality.Semantic.DeepEqual(vol.Status, *oldstatus) {
 		log.Info("status requires update")
 		if statusErr := r.updateStatusWithRetry(ctx, client.ObjectKeyFromObject(vol), vol.Status); statusErr != nil {
 			// After handleDelete removes the finalizer, the API server may
@@ -266,7 +266,7 @@ func (r *VolumeReconciler) handleDelete(ctx context.Context, vol *v1alpha1.Volum
 	}
 
 	if controllerutil.RemoveFinalizer(vol, osacVolumeFinalizer) {
-		if err := r.mgr.GetLocalManager().GetClient().Update(ctx, vol); err != nil {
+		if err := r.Update(ctx, vol); err != nil {
 			return ctrl.Result{}, err
 		}
 	}

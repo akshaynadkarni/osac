@@ -89,7 +89,7 @@ var _ = Describe("VolumeReconciler", func() {
 		Expect(updated.Finalizers).To(ContainElement(osacVolumeFinalizer))
 	})
 
-	It("should set phase to Progressing on first reconcile", func() {
+	It("should reach Ready on first reconcile when the mock provisioner succeeds", func() {
 		Expect(k8sClient.Create(testCtx, vol)).To(Succeed())
 
 		_, err := reconciler.Reconcile(testCtx, mcreconcile.Request{
@@ -241,6 +241,38 @@ var _ = Describe("VolumeReconciler", func() {
 		deleted := &osacv1alpha1.Volume{}
 		err = k8sClient.Get(testCtx, types.NamespacedName{Name: vol.Name, Namespace: vol.Namespace}, deleted)
 		Expect(errors.IsNotFound(err)).To(BeTrue())
+	})
+
+	It("should return error and keep finalizer when vendor deprovisioning fails", func() {
+		Expect(k8sClient.Create(testCtx, vol)).To(Succeed())
+
+		// Reconcile to Ready
+		for range 3 {
+			_, _ = reconciler.Reconcile(testCtx, mcreconcile.Request{
+				Request: reconcile.Request{
+					NamespacedName: types.NamespacedName{Name: vol.Name, Namespace: vol.Namespace},
+				},
+			})
+		}
+
+		// Inject vendor delete failure
+		mockProv.DeleteErr = fmt.Errorf("storage array unavailable")
+
+		Expect(k8sClient.Delete(testCtx, vol)).To(Succeed())
+
+		_, err := reconciler.Reconcile(testCtx, mcreconcile.Request{
+			Request: reconcile.Request{
+				NamespacedName: types.NamespacedName{Name: vol.Name, Namespace: vol.Namespace},
+			},
+		})
+		Expect(err).To(HaveOccurred())
+
+		// Finalizer must still be present — the volume was not deprovisioned
+		still := &osacv1alpha1.Volume{}
+		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: vol.Name, Namespace: vol.Namespace}, still)).To(Succeed())
+		Expect(still.Finalizers).To(ContainElement(osacVolumeFinalizer))
+		// Phase must be Deleting so the feedback controller syncs VOLUME_STATE_DELETING
+		Expect(still.Status.Phase).To(Equal(osacv1alpha1.VolumePhaseDeleting))
 	})
 
 	It("should return not-found gracefully when volume is already deleted", func() {

@@ -1781,6 +1781,11 @@ var _ = Describe("ComputeInstance Controller", func() {
 				ContainSubstring("Warning"),
 				ContainSubstring(eventReasonDuplicateStorageClass),
 			)))
+			Eventually(fakeRecorder.Events).Should(Receive(And(
+				ContainSubstring("Warning"),
+				ContainSubstring(eventReasonDuplicateStorageClass),
+				ContainSubstring("all matched tiers are ambiguous"),
+			)))
 		})
 	})
 

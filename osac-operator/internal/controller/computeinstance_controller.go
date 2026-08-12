@@ -589,9 +589,25 @@ func (r *ComputeInstanceReconciler) handleUpdate(ctx context.Context, _ reconcil
 		}
 	}
 
-	// Inject tenant storage classes into context for AAP extra_vars
+	// Inject tenant storage classes into context for AAP extra_vars.
+	// Prefer Tenant.status.storageClasses (populated by the storage controller).
+	// Fall back to resolving labeled StorageClasses on the target cluster when
+	// the status is empty (e.g. storage controller disabled or its jobs failed).
 	if len(tenant.Status.StorageClasses) > 0 {
 		ctx = provisioning.WithTenantStorageClasses(ctx, tenant.Status.StorageClasses)
+	} else {
+		tenantName := tenant.GetName()
+		resolution, err := getTenantStorageClasses(ctx, targetClient, tenantName)
+		if err != nil {
+			log.Error(err, "failed to resolve tenant storage classes from target cluster", "tenant", tenantName)
+			return ctrl.Result{}, err
+		}
+		if len(resolution.resolved) > 0 {
+			log.Info("resolved tenant storage classes from target cluster (status was empty)", "tenant", tenantName, "storageClasses", resolution.resolved)
+			ctx = provisioning.WithTenantStorageClasses(ctx, resolution.resolved)
+		} else {
+			log.Info("no tenant storage classes resolved from target cluster", "tenant", tenantName)
+		}
 	}
 
 	// Inject storage tier definitions and backend connections for JIT storage

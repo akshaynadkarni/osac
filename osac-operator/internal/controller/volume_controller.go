@@ -48,13 +48,14 @@ type VendorProvisioner interface {
 }
 
 // VendorCreateVolumeRequest carries the parameters the vendor needs to
-// provision a volume. These map to the Volume CR spec fields, which originate
-// from the fulfillment-service proto via the reconciler.
+// provision a volume. Backend is resolved by the fulfillment-service tier
+// resolution (OSAC-3277) before the Volume CR is created; the operator
+// passes it through to the vendor without re-resolving.
 type VendorCreateVolumeRequest struct {
-	Name        string
-	StorageTier string
-	SizeGiB     int64
-	AccessMode  string
+	Name       string
+	Backend    string
+	SizeGiB    int64
+	AccessMode v1alpha1.VolumeAccessMode
 }
 
 // VendorCreateVolumeResponse carries the vendor-assigned identifiers that the
@@ -127,12 +128,6 @@ func (r *VolumeReconciler) Reconcile(ctx context.Context, req mcreconcile.Reques
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	val, exists := vol.Annotations[osacManagementStateAnnotation]
-	if vol.ObjectMeta.DeletionTimestamp.IsZero() && exists && val == ManagementStateUnmanaged {
-		log.Info("ignoring Volume due to management-state annotation", "management-state", val)
-		return ctrl.Result{}, nil
-	}
-
 	log.Info("start reconcile")
 
 	oldstatus := vol.Status.DeepCopy()
@@ -181,6 +176,9 @@ func (r *VolumeReconciler) handleUpdate(ctx context.Context, vol *v1alpha1.Volum
 	}
 
 	if r.VendorProvisioner == nil {
+		// Temporary: VendorProvisioner is nil until the real vendor CSI client
+		// is wired in the CSI driver integration PR. Remove this guard once a
+		// concrete implementation is always passed to NewVolumeReconciler.
 		log.Info("no vendor provisioner configured, skipping provisioning")
 		return ctrl.Result{}, nil
 	}
@@ -210,10 +208,10 @@ func (r *VolumeReconciler) handleProvisioning(ctx context.Context, vol *v1alpha1
 	log := ctrllog.FromContext(ctx)
 
 	resp, err := r.VendorProvisioner.CreateVolume(ctx, VendorCreateVolumeRequest{
-		Name:        vol.Name,
-		StorageTier: vol.Spec.StorageTier,
-		SizeGiB:     vol.Spec.SizeGiB,
-		AccessMode:  string(vol.Spec.AccessMode),
+		Name:       vol.Name,
+		Backend:    vol.Status.Backend,
+		SizeGiB:    vol.Spec.SizeGiB,
+		AccessMode: vol.Spec.AccessMode,
 	})
 	if err != nil {
 		log.Error(err, "vendor provisioning failed")

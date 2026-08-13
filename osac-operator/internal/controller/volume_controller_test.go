@@ -195,25 +195,6 @@ var _ = Describe("VolumeReconciler", func() {
 		Expect(mockProv.CreateCallCount()).To(Equal(countBefore))
 	})
 
-	It("should skip reconciliation when management-state is Unmanaged", func() {
-		vol.Annotations = map[string]string{
-			osacManagementStateAnnotation: ManagementStateUnmanaged,
-		}
-		Expect(k8sClient.Create(testCtx, vol)).To(Succeed())
-
-		_, err := reconciler.Reconcile(testCtx, mcreconcile.Request{
-			Request: reconcile.Request{
-				NamespacedName: types.NamespacedName{Name: vol.Name, Namespace: vol.Namespace},
-			},
-		})
-		Expect(err).ToNot(HaveOccurred())
-
-		updated := &osacv1alpha1.Volume{}
-		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: vol.Name, Namespace: vol.Namespace}, updated)).To(Succeed())
-		Expect(updated.Finalizers).To(BeEmpty())
-		Expect(updated.Status.Phase).To(BeEmpty())
-	})
-
 	It("should handle deletion with vendor deprovisioning", func() {
 		Expect(k8sClient.Create(testCtx, vol)).To(Succeed())
 

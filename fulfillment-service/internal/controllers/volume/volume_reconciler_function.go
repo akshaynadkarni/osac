@@ -100,7 +100,7 @@ func (b *FunctionBuilder) Build() (result controllers.ReconcilerFunction[*privat
 		return
 	}
 	if b.connection == nil {
-		err = errors.New("client is mandatory")
+		err = errors.New("connection is mandatory")
 		return
 	}
 	if b.hubCache == nil {

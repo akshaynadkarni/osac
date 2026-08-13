@@ -118,6 +118,7 @@ const (
 	// Controller enable flags (defaults when flag is not set)
 	envEnableTenantController            = "OSAC_ENABLE_TENANT_CONTROLLER"
 	envEnableStorageController           = "OSAC_ENABLE_STORAGE_CONTROLLER"
+	envEnableVolumeController            = "OSAC_ENABLE_VOLUME_CONTROLLER"
 	envEnableComputeInstanceController   = "OSAC_ENABLE_COMPUTE_INSTANCE_CONTROLLER"
 	envEnableClusterController           = "OSAC_ENABLE_CLUSTER_CONTROLLER"
 	envEnableNetworkingController        = "OSAC_ENABLE_NETWORKING_CONTROLLER"
@@ -136,6 +137,7 @@ const (
 type controllerFlags struct {
 	Tenant            bool
 	Storage           bool
+	Volume            bool
 	ComputeInstance   bool
 	Cluster           bool
 	Networking        bool
@@ -151,7 +153,10 @@ func registerControllerFlags() *controllerFlags {
 		"Enable the tenant controller.")
 	flag.BoolVar(&flags.Storage, "enable-storage-controller",
 		helpers.GetEnvWithDefault(envEnableStorageController, false),
-		"Enable the storage controller.")
+		"Enable the storage controller (tenant StorageClass management, ClusterOrder storage provisioning).")
+	flag.BoolVar(&flags.Volume, "enable-volume-controller",
+		helpers.GetEnvWithDefault(envEnableVolumeController, false),
+		"Enable the volume controller (block volume provisioning via vendor CSI).")
 	flag.BoolVar(&flags.ComputeInstance, "enable-compute-instance-controller",
 		helpers.GetEnvWithDefault(envEnableComputeInstanceController, false),
 		"Enable the compute-instance controller.")
@@ -169,9 +174,10 @@ func registerControllerFlags() *controllerFlags {
 
 // enableAllIfNoneSet enables all controllers if none are explicitly enabled.
 func (f *controllerFlags) enableAllIfNoneSet() {
-	if !f.Tenant && !f.Storage && !f.ComputeInstance && !f.Cluster && !f.Networking && !f.BareMetalInstance {
+	if !f.Tenant && !f.Storage && !f.Volume && !f.ComputeInstance && !f.Cluster && !f.Networking && !f.BareMetalInstance {
 		f.Tenant = true
 		f.Storage = true
+		f.Volume = true
 		f.ComputeInstance = true
 		f.Cluster = true
 		f.Networking = true
@@ -1029,6 +1035,8 @@ func main() {
 			setupLog.Error(err, "unable to setup storage controller")
 			os.Exit(1)
 		}
+	}
+	if ctrlFlags.Volume {
 		if err := setupVolumeControllers(mgr, grpcConn); err != nil {
 			setupLog.Error(err, "unable to setup volume controllers")
 			os.Exit(1)

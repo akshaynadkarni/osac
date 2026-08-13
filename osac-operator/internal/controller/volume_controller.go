@@ -20,11 +20,9 @@ import (
 	"context"
 
 	"k8s.io/apimachinery/pkg/api/equality"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/client-go/util/retry"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	controllerutil "sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -142,16 +140,8 @@ func (r *VolumeReconciler) Reconcile(ctx context.Context, req mcreconcile.Reques
 
 	if !equality.Semantic.DeepEqual(vol.Status, *oldstatus) {
 		log.Info("status requires update")
-		if statusErr := r.updateStatusWithRetry(ctx, client.ObjectKeyFromObject(vol), vol.Status); statusErr != nil {
-			// After handleDelete removes the finalizer, the API server may
-			// delete the object before we attempt the status update. This is
-			// expected and not an error: the status was already persisted as
-			// part of the finalizer-removal Update call.
-			if !vol.ObjectMeta.DeletionTimestamp.IsZero() && apierrors.IsNotFound(statusErr) {
-				log.Info("object deleted before status update, skipping")
-				return res, nil
-			}
-			return res, statusErr
+		if err := r.Status().Update(ctx, vol); err != nil {
+			return res, err
 		}
 	}
 
@@ -270,20 +260,6 @@ func (r *VolumeReconciler) handleDelete(ctx context.Context, vol *v1alpha1.Volum
 	}
 
 	return ctrl.Result{}, nil
-}
-
-// updateStatusWithRetry updates the Volume status with retry on conflict,
-// preventing lost updates when the resource version changes between read
-// and write.
-func (r *VolumeReconciler) updateStatusWithRetry(ctx context.Context, key client.ObjectKey, newStatus v1alpha1.VolumeStatus) error {
-	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
-		latest := &v1alpha1.Volume{}
-		if err := r.Get(ctx, key, latest); err != nil {
-			return err
-		}
-		latest.Status = newStatus
-		return r.Status().Update(ctx, latest)
-	})
 }
 
 // VolumeNamespacePredicate filters events to only those in the configured

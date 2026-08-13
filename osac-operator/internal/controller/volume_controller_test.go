@@ -176,11 +176,12 @@ var _ = Describe("VolumeReconciler", func() {
 
 		// Reconcile until Ready
 		for range 3 {
-			_, _ = reconciler.Reconcile(testCtx, mcreconcile.Request{
+			_, err := reconciler.Reconcile(testCtx, mcreconcile.Request{
 				Request: reconcile.Request{
 					NamespacedName: types.NamespacedName{Name: vol.Name, Namespace: vol.Namespace},
 				},
 			})
+			Expect(err).ToNot(HaveOccurred())
 		}
 
 		countBefore := mockProv.CreateCallCount()
@@ -200,11 +201,12 @@ var _ = Describe("VolumeReconciler", func() {
 
 		// Reconcile to Ready
 		for range 3 {
-			_, _ = reconciler.Reconcile(testCtx, mcreconcile.Request{
+			_, err := reconciler.Reconcile(testCtx, mcreconcile.Request{
 				Request: reconcile.Request{
 					NamespacedName: types.NamespacedName{Name: vol.Name, Namespace: vol.Namespace},
 				},
 			})
+			Expect(err).ToNot(HaveOccurred())
 		}
 
 		// Delete
@@ -229,11 +231,12 @@ var _ = Describe("VolumeReconciler", func() {
 
 		// Reconcile to Ready
 		for range 3 {
-			_, _ = reconciler.Reconcile(testCtx, mcreconcile.Request{
+			_, err := reconciler.Reconcile(testCtx, mcreconcile.Request{
 				Request: reconcile.Request{
 					NamespacedName: types.NamespacedName{Name: vol.Name, Namespace: vol.Namespace},
 				},
 			})
+			Expect(err).ToNot(HaveOccurred())
 		}
 
 		// Inject vendor delete failure

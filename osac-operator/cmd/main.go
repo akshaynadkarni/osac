@@ -478,6 +478,46 @@ func setupStorageController(mgr mcmanager.Manager, grpcConn *grpc.ClientConn, ma
 	return nil
 }
 
+// setupControllers registers all enabled controllers with the manager.
+func setupControllers(mgr mcmanager.Manager, grpcConn *grpc.ClientConn, flags *controllerFlags, maxJobHistory int) error {
+	if flags.Cluster {
+		if err := setupClusterControllers(mgr, grpcConn, maxJobHistory); err != nil {
+			return fmt.Errorf("cluster controllers: %w", err)
+		}
+	}
+	if flags.ComputeInstance {
+		if err := setupComputeInstanceControllers(mgr, grpcConn, maxJobHistory); err != nil {
+			return fmt.Errorf("computeinstance controllers: %w", err)
+		}
+	}
+	if flags.Tenant {
+		if err := setupTenantController(mgr); err != nil {
+			return fmt.Errorf("tenant controller: %w", err)
+		}
+	}
+	if flags.Storage {
+		if err := setupStorageController(mgr, grpcConn, maxJobHistory); err != nil {
+			return fmt.Errorf("storage controller: %w", err)
+		}
+	}
+	if flags.Volume {
+		if err := setupVolumeControllers(mgr, grpcConn); err != nil {
+			return fmt.Errorf("volume controllers: %w", err)
+		}
+	}
+	if flags.Networking {
+		if err := setupNetworkingControllers(mgr, grpcConn, maxJobHistory); err != nil {
+			return fmt.Errorf("networking controllers: %w", err)
+		}
+	}
+	if flags.BareMetalInstance {
+		if err := setupBareMetalInstanceControllers(mgr, grpcConn); err != nil {
+			return fmt.Errorf("baremetalinstance controllers: %w", err)
+		}
+	}
+	return nil
+}
+
 // setupVolumeControllers registers the Volume resource controller and, when
 // grpcConn is set, the Volume feedback controller. The Volume controller uses
 // a VendorProvisioner interface instead of AAP; for now no real vendor is
@@ -1012,47 +1052,9 @@ func main() {
 	})
 	setupLog.Info("job history configuration", "maxJobs", maxJobHistory)
 
-	if ctrlFlags.Cluster {
-		if err := setupClusterControllers(mgr, grpcConn, maxJobHistory); err != nil {
-			setupLog.Error(err, "unable to setup cluster controllers")
-			os.Exit(1)
-		}
-	}
-	if ctrlFlags.ComputeInstance {
-		if err := setupComputeInstanceControllers(mgr, grpcConn, maxJobHistory); err != nil {
-			setupLog.Error(err, "unable to setup computeinstance controllers")
-			os.Exit(1)
-		}
-	}
-	if ctrlFlags.Tenant {
-		if err := setupTenantController(mgr); err != nil {
-			setupLog.Error(err, "unable to setup tenant controller")
-			os.Exit(1)
-		}
-	}
-	if ctrlFlags.Storage {
-		if err := setupStorageController(mgr, grpcConn, maxJobHistory); err != nil {
-			setupLog.Error(err, "unable to setup storage controller")
-			os.Exit(1)
-		}
-	}
-	if ctrlFlags.Volume {
-		if err := setupVolumeControllers(mgr, grpcConn); err != nil {
-			setupLog.Error(err, "unable to setup volume controllers")
-			os.Exit(1)
-		}
-	}
-	if ctrlFlags.Networking {
-		if err := setupNetworkingControllers(mgr, grpcConn, maxJobHistory); err != nil {
-			setupLog.Error(err, "unable to setup networking controllers")
-			os.Exit(1)
-		}
-	}
-	if ctrlFlags.BareMetalInstance {
-		if err := setupBareMetalInstanceControllers(mgr, grpcConn); err != nil {
-			setupLog.Error(err, "unable to setup baremetalinstance controllers")
-			os.Exit(1)
-		}
+	if err := setupControllers(mgr, grpcConn, ctrlFlags, maxJobHistory); err != nil {
+		setupLog.Error(err, "unable to setup controllers")
+		os.Exit(1)
 	}
 
 	// +kubebuilder:scaffold:builder

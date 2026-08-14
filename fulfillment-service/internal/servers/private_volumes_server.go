@@ -16,9 +16,7 @@ package servers
 import (
 	"context"
 	"errors"
-	"fmt"
 	"log/slog"
-	"strconv"
 
 	"github.com/prometheus/client_golang/prometheus"
 	grpccodes "google.golang.org/grpc/codes"
@@ -28,9 +26,18 @@ import (
 
 	privatev1 "github.com/osac-project/osac/fulfillment-service/internal/api/osac/private/v1"
 	"github.com/osac-project/osac/fulfillment-service/internal/auth"
-	"github.com/osac-project/osac/fulfillment-service/internal/database/dao"
 	"github.com/osac-project/osac/fulfillment-service/internal/events"
 )
+
+// TierResolution holds the result of resolving a StorageTier name to a
+// concrete backend and protocol.
+type TierResolution struct {
+	BackendID string
+	Protocol  privatev1.StorageProtocol
+}
+
+// TierResolverFunc resolves a StorageTier name to a backend and protocol.
+type TierResolverFunc func(ctx context.Context, tierName string) (*TierResolution, error)
 
 type PrivateVolumesServerBuilder struct {
 	logger            *slog.Logger
@@ -38,7 +45,7 @@ type PrivateVolumesServerBuilder struct {
 	attributionLogic  auth.AttributionLogic
 	tenancyLogic      auth.TenancyLogic
 	metricsRegisterer prometheus.Registerer
-	storageTiersDAO   *dao.GenericDAO[*privatev1.StorageTier]
+	tierResolver      TierResolverFunc
 }
 
 var _ privatev1.VolumesServer = (*PrivateVolumesServer)(nil)
@@ -46,14 +53,9 @@ var _ privatev1.VolumesServer = (*PrivateVolumesServer)(nil)
 type PrivateVolumesServer struct {
 	privatev1.UnimplementedVolumesServer
 
-	logger          *slog.Logger
-	generic         *GenericServer[*privatev1.Volume]
-	storageTiersDAO *dao.GenericDAO[*privatev1.StorageTier]
-}
-
-type tierResolution struct {
-	backendID string
-	protocol  privatev1.StorageProtocol
+	logger       *slog.Logger
+	generic      *GenericServer[*privatev1.Volume]
+	tierResolver TierResolverFunc
 }
 
 func NewPrivateVolumesServer() *PrivateVolumesServerBuilder {
@@ -85,8 +87,8 @@ func (b *PrivateVolumesServerBuilder) SetMetricsRegisterer(value prometheus.Regi
 	return b
 }
 
-func (b *PrivateVolumesServerBuilder) SetStorageTiersDAO(value *dao.GenericDAO[*privatev1.StorageTier]) *PrivateVolumesServerBuilder {
-	b.storageTiersDAO = value
+func (b *PrivateVolumesServerBuilder) SetTierResolver(value TierResolverFunc) *PrivateVolumesServerBuilder {
+	b.tierResolver = value
 	return b
 }
 
@@ -99,8 +101,8 @@ func (b *PrivateVolumesServerBuilder) Build() (result *PrivateVolumesServer, err
 		err = errors.New("tenancy logic is mandatory")
 		return
 	}
-	if b.storageTiersDAO == nil {
-		err = errors.New("storage tiers DAO is mandatory")
+	if b.tierResolver == nil {
+		err = errors.New("tier resolver is mandatory")
 		return
 	}
 
@@ -117,9 +119,9 @@ func (b *PrivateVolumesServerBuilder) Build() (result *PrivateVolumesServer, err
 	}
 
 	result = &PrivateVolumesServer{
-		logger:          b.logger,
-		generic:         generic,
-		storageTiersDAO: b.storageTiersDAO,
+		logger:       b.logger,
+		generic:      generic,
+		tierResolver: b.tierResolver,
 	}
 	return
 }
@@ -145,7 +147,7 @@ func (s *PrivateVolumesServer) Create(ctx context.Context,
 		return
 	}
 
-	resolved, err := s.resolveTier(ctx, vol.GetSpec().GetStorageTier())
+	resolved, err := s.tierResolver(ctx, vol.GetSpec().GetStorageTier())
 	if err != nil {
 		return
 	}
@@ -154,8 +156,8 @@ func (s *PrivateVolumesServer) Create(ctx context.Context,
 		vol.SetStatus(&privatev1.VolumeStatus{})
 	}
 	vol.GetStatus().SetState(privatev1.VolumeState_VOLUME_STATE_CREATING)
-	vol.GetStatus().SetBackend(resolved.backendID)
-	vol.GetStatus().SetProtocol(resolved.protocol)
+	vol.GetStatus().SetBackend(resolved.BackendID)
+	vol.GetStatus().SetProtocol(resolved.Protocol)
 
 	vol.SetId("")
 
@@ -184,37 +186,6 @@ func (s *PrivateVolumesServer) validateVolumeCreate(vol *privatev1.Volume) error
 		return grpcstatus.Errorf(grpccodes.InvalidArgument, "field 'spec.access_mode' is required")
 	}
 	return nil
-}
-
-func (s *PrivateVolumesServer) resolveTier(ctx context.Context, tierName string) (*tierResolution, error) {
-	filter := fmt.Sprintf("this.metadata.name == %s", strconv.Quote(tierName))
-	listResp, err := s.storageTiersDAO.List().
-		SetFilter(filter).
-		SetLimit(1).
-		Do(ctx)
-	if err != nil {
-		return nil, grpcstatus.Errorf(grpccodes.Internal, "failed to look up storage tier %q: %v", tierName, err)
-	}
-	items := listResp.GetItems()
-	if len(items) == 0 {
-		return nil, grpcstatus.Errorf(grpccodes.NotFound, "storage tier %q not found", tierName)
-	}
-	tier := items[0]
-
-	if tier.GetStatus().GetState() != privatev1.StorageTierState_STORAGE_TIER_STATE_ACTIVE {
-		return nil, grpcstatus.Errorf(grpccodes.FailedPrecondition, "storage tier %q is not active", tierName)
-	}
-
-	backends := tier.GetSpec().GetBackends()
-	if len(backends) == 0 {
-		return nil, grpcstatus.Errorf(grpccodes.FailedPrecondition, "storage tier %q has no backend associations", tierName)
-	}
-
-	selected := backends[0]
-	return &tierResolution{
-		backendID: selected.GetBackendId(),
-		protocol:  selected.GetProtocol(),
-	}, nil
 }
 
 func (s *PrivateVolumesServer) Update(ctx context.Context,

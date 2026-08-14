@@ -14,6 +14,7 @@ language governing permissions and limitations under the License.
 package servers
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/google/uuid"
@@ -28,11 +29,19 @@ import (
 
 var _ = Describe("Private volumes server", func() {
 	Describe("Creation", func() {
+		stubResolver := TierResolverFunc(func(_ context.Context, _ string) (*TierResolution, error) {
+			return &TierResolution{
+				BackendID: "test-backend",
+				Protocol:  privatev1.StorageProtocol_STORAGE_PROTOCOL_BLOCK,
+			}, nil
+		})
+
 		It("Can be built if all the required parameters are set", func() {
 			server, err := NewPrivateVolumesServer().
 				SetLogger(logger).
 				SetAttributionLogic(attribution).
 				SetTenancyLogic(tenancy).
+				SetTierResolver(stubResolver).
 				Build()
 			Expect(err).ToNot(HaveOccurred())
 			Expect(server).ToNot(BeNil())
@@ -42,6 +51,7 @@ var _ = Describe("Private volumes server", func() {
 			server, err := NewPrivateVolumesServer().
 				SetAttributionLogic(attribution).
 				SetTenancyLogic(tenancy).
+				SetTierResolver(stubResolver).
 				Build()
 			Expect(err).To(MatchError("logger is mandatory"))
 			Expect(server).To(BeNil())
@@ -51,8 +61,19 @@ var _ = Describe("Private volumes server", func() {
 			server, err := NewPrivateVolumesServer().
 				SetLogger(logger).
 				SetAttributionLogic(attribution).
+				SetTierResolver(stubResolver).
 				Build()
 			Expect(err).To(MatchError("tenancy logic is mandatory"))
+			Expect(server).To(BeNil())
+		})
+
+		It("Fails if tier resolver is not set", func() {
+			server, err := NewPrivateVolumesServer().
+				SetLogger(logger).
+				SetAttributionLogic(attribution).
+				SetTenancyLogic(tenancy).
+				Build()
+			Expect(err).To(MatchError("tier resolver is mandatory"))
 			Expect(server).To(BeNil())
 		})
 	})
@@ -66,6 +87,12 @@ var _ = Describe("Private volumes server", func() {
 				SetLogger(logger).
 				SetAttributionLogic(attribution).
 				SetTenancyLogic(tenancy).
+				SetTierResolver(func(_ context.Context, _ string) (*TierResolution, error) {
+					return &TierResolution{
+						BackendID: "test-backend",
+						Protocol:  privatev1.StorageProtocol_STORAGE_PROTOCOL_BLOCK,
+					}, nil
+				}).
 				Build()
 			Expect(err).ToNot(HaveOccurred())
 		})

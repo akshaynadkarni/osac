@@ -20,6 +20,7 @@ import (
 	"math"
 	"net/http"
 	"os"
+	"strconv"
 	"syscall"
 	"time"
 
@@ -30,10 +31,12 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"google.golang.org/grpc"
+	grpccodes "google.golang.org/grpc/codes"
 	"google.golang.org/grpc/health"
 	healthv1 "google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/keepalive"
 	"google.golang.org/grpc/reflection"
+	grpcstatus "google.golang.org/grpc/status"
 	"k8s.io/klog/v2"
 	crlog "sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -1216,7 +1219,8 @@ func (c *runnerContext) run(cmd *cobra.Command, argv []string) error { //nolint:
 	}
 	privatev1.RegisterStorageTiersServer(grpcServer, privateStorageTiersServer)
 
-	// Create the storage tiers DAO for tier resolution in the volumes server:
+	// Create the tier resolver for the volumes server. The resolver looks up a
+	// StorageTier by name and returns the first backend association.
 	storageTiersDAO, err := dao.NewGenericDAO[*privatev1.StorageTier]().
 		SetLogger(c.logger).
 		SetTenancyLogic(tenancyLogic).
@@ -1224,6 +1228,7 @@ func (c *runnerContext) run(cmd *cobra.Command, argv []string) error { //nolint:
 	if err != nil {
 		return fmt.Errorf("failed to create storage tiers DAO: %w", err)
 	}
+	tierResolver := newDAOTierResolver(storageTiersDAO)
 
 	// Create the private volumes server:
 	c.logger.InfoContext(ctx, "Creating private volumes server")
@@ -1233,7 +1238,7 @@ func (c *runnerContext) run(cmd *cobra.Command, argv []string) error { //nolint:
 		SetAttributionLogic(privateAttributionLogic).
 		SetTenancyLogic(tenancyLogic).
 		SetMetricsRegisterer(metricsRegisterer).
-		SetStorageTiersDAO(storageTiersDAO).
+		SetTierResolver(tierResolver).
 		Build()
 	if err != nil {
 		return fmt.Errorf("failed to create private volumes server: %w", err)
@@ -1787,6 +1792,42 @@ const tokenIssuerFlagHelp = `
 _URL_ - Issuer URL for JWT tokens. Used as the iss claim. Token
 consumers derive the JWKS endpoint as <issuer>/.well-known/jwks.json.
 `
+
+func newDAOTierResolver(
+	tiersDAO *dao.GenericDAO[*privatev1.StorageTier],
+) servers.TierResolverFunc {
+	return func(ctx context.Context, tierName string) (*servers.TierResolution, error) {
+		filter := fmt.Sprintf("this.metadata.name == %s", strconv.Quote(tierName))
+		listResp, err := tiersDAO.List().
+			SetFilter(filter).
+			SetLimit(1).
+			Do(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("failed to look up storage tier %q: %w", tierName, err)
+		}
+		items := listResp.GetItems()
+		if len(items) == 0 {
+			return nil, grpcstatus.Errorf(grpccodes.NotFound, "storage tier %q not found", tierName)
+		}
+		tier := items[0]
+
+		if tier.GetStatus().GetState() != privatev1.StorageTierState_STORAGE_TIER_STATE_ACTIVE {
+			return nil, grpcstatus.Errorf(grpccodes.FailedPrecondition, "storage tier %q is not active", tierName)
+		}
+
+		backends := tier.GetSpec().GetBackends()
+		if len(backends) == 0 {
+			return nil, grpcstatus.Errorf(grpccodes.FailedPrecondition,
+				"storage tier %q has no backend associations", tierName)
+		}
+
+		selected := backends[0]
+		return &servers.TierResolution{
+			BackendID: selected.GetBackendId(),
+			Protocol:  selected.GetProtocol(),
+		}, nil
+	}
+}
 
 const emergencyServiceAccountsFlagHelp = `
 _NAMES_ - Comma-separated list of Kubernetes service account names that are allowed to access the private API with

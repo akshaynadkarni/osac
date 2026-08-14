@@ -688,4 +688,104 @@ var _ = Describe("Kubernetes validation error handling", func() {
 		)
 		Expect(volume.GetStatus().GetMessage()).To(ContainSubstring("spec.storageTier"))
 	})
+
+	It("persists hub assignment and returns early on first reconciliation", func() {
+		ctx := context.Background()
+		ctrl := gomock.NewController(GinkgoT())
+		DeferCleanup(ctrl.Finish)
+
+		hubCache := controllers.NewMockHubCache(ctrl)
+		hubCache.EXPECT().
+			Get(gomock.Any(), "hub-a").
+			Return(&controllers.HubEntry{Namespace: "hub-ns", Client: fake.NewClientBuilder().Build()}, nil)
+
+		hubsClient := NewMockHubsClient(ctrl)
+		hubsClient.EXPECT().
+			List(gomock.Any(), gomock.Any(), gomock.Any()).
+			Return(privatev1.HubsListResponse_builder{
+				Items: []*privatev1.Hub{
+					privatev1.Hub_builder{Id: "hub-a"}.Build(),
+				},
+			}.Build(), nil)
+
+		volumesClient := NewMockVolumesClient(ctrl)
+		volumesClient.EXPECT().
+			Update(gomock.Any(), gomock.Any(), gomock.Any()).
+			DoAndReturn(func(ctx context.Context, req *privatev1.VolumesUpdateRequest, opts ...grpc.CallOption) (*privatev1.VolumesUpdateResponse, error) {
+				Expect(req.GetObject().GetStatus().GetHub()).To(Equal("hub-a"))
+				return &privatev1.VolumesUpdateResponse{Object: req.GetObject()}, nil
+			}).
+			Times(1)
+
+		volume := privatev1.Volume_builder{
+			Id: "vol-hub-select",
+			Metadata: privatev1.Metadata_builder{
+				Finalizers: []string{finalizers.Controller},
+				Tenant:     "test-tenant",
+			}.Build(),
+			Spec: privatev1.VolumeSpec_builder{
+				StorageTier: "gold",
+				SizeGib:     100,
+				AccessMode:  privatev1.VolumeAccessMode_VOLUME_ACCESS_MODE_READ_WRITE_ONCE,
+			}.Build(),
+			Status: privatev1.VolumeStatus_builder{
+				State: privatev1.VolumeState_VOLUME_STATE_CREATING,
+			}.Build(),
+		}.Build()
+
+		f := &function{
+			logger:         logger,
+			hubCache:       hubCache,
+			hubsClient:     hubsClient,
+			volumesClient:  volumesClient,
+			maskCalculator: masks.NewCalculator().Build(),
+		}
+
+		err := f.run(ctx, volume)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(volume.GetStatus().GetHub()).To(Equal("hub-a"))
+	})
+
+	It("persists FAILED state when tenant validation fails", func() {
+		ctx := context.Background()
+		ctrl := gomock.NewController(GinkgoT())
+		DeferCleanup(ctrl.Finish)
+
+		volumesClient := NewMockVolumesClient(ctrl)
+		volumesClient.EXPECT().
+			Update(gomock.Any(), gomock.Any(), gomock.Any()).
+			DoAndReturn(func(ctx context.Context, req *privatev1.VolumesUpdateRequest, opts ...grpc.CallOption) (*privatev1.VolumesUpdateResponse, error) {
+				Expect(req.GetObject().GetStatus().GetState()).To(
+					Equal(privatev1.VolumeState_VOLUME_STATE_FAILED))
+				return &privatev1.VolumesUpdateResponse{Object: req.GetObject()}, nil
+			}).
+			Times(1)
+
+		volume := privatev1.Volume_builder{
+			Id: "vol-no-tenant",
+			Metadata: privatev1.Metadata_builder{
+				Finalizers: []string{finalizers.Controller},
+			}.Build(),
+			Spec: privatev1.VolumeSpec_builder{
+				StorageTier: "gold",
+				SizeGib:     100,
+				AccessMode:  privatev1.VolumeAccessMode_VOLUME_ACCESS_MODE_READ_WRITE_ONCE,
+			}.Build(),
+			Status: privatev1.VolumeStatus_builder{
+				State: privatev1.VolumeState_VOLUME_STATE_CREATING,
+			}.Build(),
+		}.Build()
+
+		f := &function{
+			logger:         logger,
+			volumesClient:  volumesClient,
+			maskCalculator: masks.NewCalculator().Build(),
+		}
+
+		err := f.run(ctx, volume)
+		Expect(err).To(HaveOccurred())
+		Expect(volume.GetStatus().GetState()).To(
+			Equal(privatev1.VolumeState_VOLUME_STATE_FAILED))
+		Expect(volume.GetStatus().GetMessage()).To(ContainSubstring("tenant"))
+	})
 })

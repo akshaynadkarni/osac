@@ -128,26 +128,35 @@ func (r *function) run(ctx context.Context, volume *privatev1.Volume) error {
 		r:      r,
 		volume: volume,
 	}
-	var err error
+	var reconcileErr error
 	if volume.HasMetadata() && volume.GetMetadata().HasDeletionTimestamp() {
-		err = t.delete(ctx)
+		reconcileErr = t.delete(ctx)
 	} else {
-		err = t.update(ctx)
+		reconcileErr = t.update(ctx)
 	}
-	if err != nil {
-		return err
+	if reconcileErr != nil {
+		t.setFailed(reconcileErr)
 	}
 	updateMask := r.maskCalculator.Calculate(oldVolume, volume)
-	if len(updateMask.GetPaths()) == 0 {
-		return nil
+
+	var updateErr error
+	if len(updateMask.GetPaths()) > 0 {
+		_, updateErr = r.volumesClient.Update(ctx, privatev1.VolumesUpdateRequest_builder{
+			Object:     volume,
+			UpdateMask: updateMask,
+		}.Build())
 	}
 
-	_, err = r.volumesClient.Update(ctx, privatev1.VolumesUpdateRequest_builder{
-		Object:     volume,
-		UpdateMask: updateMask,
-	}.Build())
-
-	return err
+	if reconcileErr != nil {
+		if updateErr != nil {
+			r.logger.WarnContext(ctx, "Failed to persist status after reconciliation error",
+				slog.String("reconcile_error", reconcileErr.Error()),
+				slog.String("update_error", updateErr.Error()),
+			)
+		}
+		return reconcileErr
+	}
+	return updateErr
 }
 
 // update handles the non-delete path: adds the controller finalizer, sets
@@ -164,11 +173,14 @@ func (t *task) update(ctx context.Context) error {
 		return err
 	}
 
+	hubJustSelected := t.volume.GetStatus().GetHub() == ""
 	if err := t.selectHub(ctx); err != nil {
 		return err
 	}
-
 	t.volume.GetStatus().SetHub(t.hubId)
+	if hubJustSelected {
+		return nil
+	}
 
 	object, err := t.getKubeObject(ctx)
 	if err != nil {

@@ -21,7 +21,6 @@ import (
 )
 
 // VolumeSpec defines the desired state of Volume.
-// +kubebuilder:validation:XValidation:rule="!has(oldSelf.pvcRef) || has(self.pvcRef)",message="pvcRef cannot be removed once set"
 type VolumeSpec struct {
 	// StorageTier is the name of the StorageTier that determines which backend
 	// and protocol serve this volume.
@@ -42,43 +41,6 @@ type VolumeSpec struct {
 	// +kubebuilder:validation:Enum=ReadWriteOnce;ReadOnlyMany;ReadWriteMany;ReadWriteOncePod
 	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="accessMode is immutable"
 	AccessMode VolumeAccessMode `json:"accessMode"`
-
-	// PVCRef is the reference to the PVC that triggered this volume creation.
-	// Set by the CSI driver. Empty for API-driven volume creation.
-	// +kubebuilder:validation:Optional
-	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="pvcRef is immutable"
-	PVCRef *PVCReferenceType `json:"pvcRef,omitempty"`
-}
-
-// PVCReferenceType identifies the PVC that triggered volume creation.
-type PVCReferenceType struct {
-	// Name of the PersistentVolumeClaim.
-	// +kubebuilder:validation:Required
-	// +kubebuilder:validation:MinLength=1
-	Name string `json:"name"`
-
-	// Namespace of the PersistentVolumeClaim.
-	// +kubebuilder:validation:Required
-	// +kubebuilder:validation:MinLength=1
-	Namespace string `json:"namespace"`
-
-	// Cluster where the PersistentVolumeClaim exists.
-	// +kubebuilder:validation:Required
-	// +kubebuilder:validation:MinLength=1
-	Cluster string `json:"cluster"`
-}
-
-// PVReferenceType identifies the PV created for a volume.
-type PVReferenceType struct {
-	// Name of the PersistentVolume.
-	// +kubebuilder:validation:Required
-	// +kubebuilder:validation:MinLength=1
-	Name string `json:"name"`
-
-	// Cluster where the PersistentVolume exists.
-	// +kubebuilder:validation:Required
-	// +kubebuilder:validation:MinLength=1
-	Cluster string `json:"cluster"`
 }
 
 // VolumeAccessMode defines valid Kubernetes PersistentVolume access modes.
@@ -152,13 +114,6 @@ type VolumeStatus struct {
 	// +kubebuilder:validation:Enum=Block;NFS
 	Protocol VolumeProtocol `json:"protocol,omitempty"`
 
-	// PVCRef is the operator-confirmed reference to the PVC on the tenant cluster.
-	// +kubebuilder:validation:Optional
-	PVCRef *PVCReferenceType `json:"pvcRef,omitempty"`
-
-	// PVRef is the reference to the PV created for this volume on the tenant cluster.
-	// +kubebuilder:validation:Optional
-	PVRef *PVReferenceType `json:"pvRef,omitempty"`
 }
 
 // +kubebuilder:object:root=true

@@ -81,31 +81,6 @@ spec:
                 x-kubernetes-validations:
                 - message: accessMode is immutable
                   rule: self == oldSelf
-              pvcRef:
-                description: |-
-                  PVCRef is the reference to the PVC that triggered this volume creation.
-                  Set by the CSI driver. Empty for API-driven volume creation.
-                properties:
-                  cluster:
-                    description: Cluster where the PersistentVolumeClaim exists.
-                    minLength: 1
-                    type: string
-                  name:
-                    description: Name of the PersistentVolumeClaim.
-                    minLength: 1
-                    type: string
-                  namespace:
-                    description: Namespace of the PersistentVolumeClaim.
-                    minLength: 1
-                    type: string
-                required:
-                - cluster
-                - name
-                - namespace
-                type: object
-                x-kubernetes-validations:
-                - message: pvcRef is immutable
-                  rule: self == oldSelf
               sizeGiB:
                 description: SizeGiB is the requested storage capacity in gibibytes.
                 format: int64
@@ -128,9 +103,6 @@ spec:
             - sizeGiB
             - storageTier
             type: object
-            x-kubernetes-validations:
-            - message: pvcRef cannot be removed once set
-              rule: '!has(oldSelf.pvcRef) || has(self.pvcRef)'
           status:
             description: VolumeStatus defines the observed state of Volume.
             properties:
@@ -221,43 +193,6 @@ spec:
                   Protocol is the storage protocol used for this volume.
                   Resolved during tier resolution at creation time.
                 type: string
-              pvRef:
-                description: PVRef is the reference to the PV created for this volume
-                  on the tenant cluster.
-                properties:
-                  cluster:
-                    description: Cluster where the PersistentVolume exists.
-                    minLength: 1
-                    type: string
-                  name:
-                    description: Name of the PersistentVolume.
-                    minLength: 1
-                    type: string
-                required:
-                - cluster
-                - name
-                type: object
-              pvcRef:
-                description: PVCRef is the operator-confirmed reference to the PVC
-                  on the tenant cluster.
-                properties:
-                  cluster:
-                    description: Cluster where the PersistentVolumeClaim exists.
-                    minLength: 1
-                    type: string
-                  name:
-                    description: Name of the PersistentVolumeClaim.
-                    minLength: 1
-                    type: string
-                  namespace:
-                    description: Namespace of the PersistentVolumeClaim.
-                    minLength: 1
-                    type: string
-                required:
-                - cluster
-                - name
-                - namespace
-                type: object
               vendorVolumeID:
                 description: |-
                   VendorVolumeID is the opaque identifier assigned by the vendor storage array.

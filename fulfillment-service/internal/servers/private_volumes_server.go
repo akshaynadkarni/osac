@@ -18,6 +18,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strconv"
 
 	"github.com/prometheus/client_golang/prometheus"
 	grpccodes "google.golang.org/grpc/codes"
@@ -186,7 +187,7 @@ func (s *PrivateVolumesServer) validateVolumeCreate(vol *privatev1.Volume) error
 }
 
 func (s *PrivateVolumesServer) resolveTier(ctx context.Context, tierName string) (*tierResolution, error) {
-	filter := fmt.Sprintf("metadata.name == '%s'", tierName)
+	filter := fmt.Sprintf("this.metadata.name == %s", strconv.Quote(tierName))
 	listResp, err := s.storageTiersDAO.List().
 		SetFilter(filter).
 		SetLimit(1).

@@ -217,9 +217,6 @@ func applyVolumeUpdate(base, update *privatev1.Volume, mask *fieldmaskpb.FieldMa
 			base.GetSpec().SetSizeGib(update.GetSpec().GetSizeGib())
 		case "spec.access_mode":
 			base.GetSpec().SetAccessMode(update.GetSpec().GetAccessMode())
-		case "spec.pvc_ref":
-			// pvc_ref is intentionally mutable: set by the CSI driver post-creation.
-			base.GetSpec().SetPvcRef(update.GetSpec().GetPvcRef())
 		default:
 			// Unknown paths are handled by the generic update layer.
 		}

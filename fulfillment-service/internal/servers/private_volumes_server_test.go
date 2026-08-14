@@ -141,40 +141,14 @@ var _ = Describe("Private volumes server", func() {
 			Expect(obj.GetSpec().GetStorageTier()).To(Equal("gold"))
 		})
 
-		It("Creates a standalone volume without pvc_ref", func() {
+		It("Creates a standalone volume", func() {
 			created := createStandaloneVolume()
 
 			Expect(created.GetId()).ToNot(BeEmpty())
 			Expect(created.GetSpec().GetStorageTier()).To(Equal("gold"))
 			Expect(created.GetSpec().GetSizeGib()).To(Equal(int64(50)))
-			Expect(created.GetSpec().GetPvcRef()).To(BeNil())
 			Expect(created.GetStatus().GetState()).To(Equal(
 				privatev1.VolumeState_VOLUME_STATE_CREATING))
-		})
-
-		It("Creates a volume with pvc_ref", func() {
-			response, err := server.Create(ctx, privatev1.VolumesCreateRequest_builder{
-				Object: privatev1.Volume_builder{
-					Metadata: privatev1.Metadata_builder{
-						Name: "pvc-volume",
-					}.Build(),
-					Spec: privatev1.VolumeSpec_builder{
-						StorageTier: "gold",
-						SizeGib:     100,
-						AccessMode:  privatev1.VolumeAccessMode_VOLUME_ACCESS_MODE_READ_WRITE_ONCE,
-						PvcRef: privatev1.PVCReference_builder{
-							Name:      "my-pvc",
-							Namespace: "default",
-							Cluster:   "cluster-1",
-						}.Build(),
-					}.Build(),
-				}.Build(),
-			}.Build())
-			Expect(err).ToNot(HaveOccurred())
-			obj := response.GetObject()
-			Expect(obj.GetSpec().GetPvcRef().GetName()).To(Equal("my-pvc"))
-			Expect(obj.GetSpec().GetPvcRef().GetNamespace()).To(Equal("default"))
-			Expect(obj.GetSpec().GetPvcRef().GetCluster()).To(Equal("cluster-1"))
 		})
 
 		It("List volumes", func() {

@@ -16,6 +16,7 @@ package servers
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -26,6 +27,7 @@ import (
 
 	privatev1 "github.com/osac-project/osac/fulfillment-service/internal/api/osac/private/v1"
 	"github.com/osac-project/osac/fulfillment-service/internal/auth"
+	"github.com/osac-project/osac/fulfillment-service/internal/database/dao"
 	"github.com/osac-project/osac/fulfillment-service/internal/events"
 )
 
@@ -35,6 +37,7 @@ type PrivateVolumesServerBuilder struct {
 	attributionLogic  auth.AttributionLogic
 	tenancyLogic      auth.TenancyLogic
 	metricsRegisterer prometheus.Registerer
+	storageTiersDAO   *dao.GenericDAO[*privatev1.StorageTier]
 }
 
 var _ privatev1.VolumesServer = (*PrivateVolumesServer)(nil)
@@ -42,8 +45,14 @@ var _ privatev1.VolumesServer = (*PrivateVolumesServer)(nil)
 type PrivateVolumesServer struct {
 	privatev1.UnimplementedVolumesServer
 
-	logger  *slog.Logger
-	generic *GenericServer[*privatev1.Volume]
+	logger          *slog.Logger
+	generic         *GenericServer[*privatev1.Volume]
+	storageTiersDAO *dao.GenericDAO[*privatev1.StorageTier]
+}
+
+type tierResolution struct {
+	backendID string
+	protocol  privatev1.StorageProtocol
 }
 
 func NewPrivateVolumesServer() *PrivateVolumesServerBuilder {
@@ -75,6 +84,11 @@ func (b *PrivateVolumesServerBuilder) SetMetricsRegisterer(value prometheus.Regi
 	return b
 }
 
+func (b *PrivateVolumesServerBuilder) SetStorageTiersDAO(value *dao.GenericDAO[*privatev1.StorageTier]) *PrivateVolumesServerBuilder {
+	b.storageTiersDAO = value
+	return b
+}
+
 func (b *PrivateVolumesServerBuilder) Build() (result *PrivateVolumesServer, err error) {
 	if b.logger == nil {
 		err = errors.New("logger is mandatory")
@@ -82,6 +96,10 @@ func (b *PrivateVolumesServerBuilder) Build() (result *PrivateVolumesServer, err
 	}
 	if b.tenancyLogic == nil {
 		err = errors.New("tenancy logic is mandatory")
+		return
+	}
+	if b.storageTiersDAO == nil {
+		err = errors.New("storage tiers DAO is mandatory")
 		return
 	}
 
@@ -98,8 +116,9 @@ func (b *PrivateVolumesServerBuilder) Build() (result *PrivateVolumesServer, err
 	}
 
 	result = &PrivateVolumesServer{
-		logger:  b.logger,
-		generic: generic,
+		logger:          b.logger,
+		generic:         generic,
+		storageTiersDAO: b.storageTiersDAO,
 	}
 	return
 }
@@ -125,10 +144,17 @@ func (s *PrivateVolumesServer) Create(ctx context.Context,
 		return
 	}
 
+	resolved, err := s.resolveTier(ctx, vol.GetSpec().GetStorageTier())
+	if err != nil {
+		return
+	}
+
 	if vol.GetStatus() == nil {
 		vol.SetStatus(&privatev1.VolumeStatus{})
 	}
 	vol.GetStatus().SetState(privatev1.VolumeState_VOLUME_STATE_CREATING)
+	vol.GetStatus().SetBackend(resolved.backendID)
+	vol.GetStatus().SetProtocol(resolved.protocol)
 
 	vol.SetId("")
 
@@ -157,6 +183,37 @@ func (s *PrivateVolumesServer) validateVolumeCreate(vol *privatev1.Volume) error
 		return grpcstatus.Errorf(grpccodes.InvalidArgument, "field 'spec.access_mode' is required")
 	}
 	return nil
+}
+
+func (s *PrivateVolumesServer) resolveTier(ctx context.Context, tierName string) (*tierResolution, error) {
+	filter := fmt.Sprintf("metadata.name == '%s'", tierName)
+	listResp, err := s.storageTiersDAO.List().
+		SetFilter(filter).
+		SetLimit(1).
+		Do(ctx)
+	if err != nil {
+		return nil, grpcstatus.Errorf(grpccodes.Internal, "failed to look up storage tier %q: %v", tierName, err)
+	}
+	items := listResp.GetItems()
+	if len(items) == 0 {
+		return nil, grpcstatus.Errorf(grpccodes.NotFound, "storage tier %q not found", tierName)
+	}
+	tier := items[0]
+
+	if tier.GetStatus().GetState() != privatev1.StorageTierState_STORAGE_TIER_STATE_ACTIVE {
+		return nil, grpcstatus.Errorf(grpccodes.FailedPrecondition, "storage tier %q is not active", tierName)
+	}
+
+	backends := tier.GetSpec().GetBackends()
+	if len(backends) == 0 {
+		return nil, grpcstatus.Errorf(grpccodes.FailedPrecondition, "storage tier %q has no backend associations", tierName)
+	}
+
+	selected := backends[0]
+	return &tierResolution{
+		backendID: selected.GetBackendId(),
+		protocol:  selected.GetProtocol(),
+	}, nil
 }
 
 func (s *PrivateVolumesServer) Update(ctx context.Context,

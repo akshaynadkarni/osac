@@ -1216,6 +1216,15 @@ func (c *runnerContext) run(cmd *cobra.Command, argv []string) error { //nolint:
 	}
 	privatev1.RegisterStorageTiersServer(grpcServer, privateStorageTiersServer)
 
+	// Create the storage tiers DAO for tier resolution in the volumes server:
+	storageTiersDAO, err := dao.NewGenericDAO[*privatev1.StorageTier]().
+		SetLogger(c.logger).
+		SetTenancyLogic(tenancyLogic).
+		Build()
+	if err != nil {
+		return fmt.Errorf("failed to create storage tiers DAO: %w", err)
+	}
+
 	// Create the private volumes server:
 	c.logger.InfoContext(ctx, "Creating private volumes server")
 	privateVolumesServer, err := servers.NewPrivateVolumesServer().
@@ -1224,6 +1233,7 @@ func (c *runnerContext) run(cmd *cobra.Command, argv []string) error { //nolint:
 		SetAttributionLogic(privateAttributionLogic).
 		SetTenancyLogic(tenancyLogic).
 		SetMetricsRegisterer(metricsRegisterer).
+		SetStorageTiersDAO(storageTiersDAO).
 		Build()
 	if err != nil {
 		return fmt.Errorf("failed to create private volumes server: %w", err)

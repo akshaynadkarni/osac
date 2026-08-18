@@ -755,9 +755,11 @@ var _ = Describe("Kubernetes validation error handling", func() {
 		volumesClient.EXPECT().
 			Update(gomock.Any(), gomock.Any(), gomock.Any()).
 			DoAndReturn(func(ctx context.Context, req *privatev1.VolumesUpdateRequest, opts ...grpc.CallOption) (*privatev1.VolumesUpdateResponse, error) {
+				Expect(req.GetObject().GetStatus().GetState()).To(
+					Equal(privatev1.VolumeState_VOLUME_STATE_FAILED))
 				return &privatev1.VolumesUpdateResponse{Object: req.GetObject()}, nil
 			}).
-			MinTimes(1)
+			Times(1)
 
 		volume := privatev1.Volume_builder{
 			Id: "vol-no-tenant",
@@ -811,6 +813,9 @@ var _ = Describe("Kubernetes validation error handling", func() {
 			AnyTimes()
 
 		volumesClient := NewMockVolumesClient(ctrl)
+		volumesClient.EXPECT().
+			Update(gomock.Any(), gomock.Any(), gomock.Any()).
+			Times(0)
 
 		volume := privatev1.Volume_builder{
 			Id: "vol-transient-k8s",
@@ -870,6 +875,9 @@ var _ = Describe("Kubernetes validation error handling", func() {
 			AnyTimes()
 
 		volumesClient := NewMockVolumesClient(ctrl)
+		volumesClient.EXPECT().
+			Update(gomock.Any(), gomock.Any(), gomock.Any()).
+			Times(0)
 
 		volume := privatev1.Volume_builder{
 			Id: "vol-delete-transient",

@@ -160,7 +160,8 @@ func (t *task) update(ctx context.Context) error {
 	t.setDefaults()
 
 	if err := t.validateTenant(); err != nil {
-		return err
+		t.setFailed(err)
+		return nil
 	}
 
 	hubJustSelected := t.volume.GetStatus().GetHub() == ""

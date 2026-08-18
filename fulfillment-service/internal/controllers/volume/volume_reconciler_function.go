@@ -128,35 +128,25 @@ func (r *function) run(ctx context.Context, volume *privatev1.Volume) error {
 		r:      r,
 		volume: volume,
 	}
-	var reconcileErr error
+	var err error
 	if volume.HasMetadata() && volume.GetMetadata().HasDeletionTimestamp() {
-		reconcileErr = t.delete(ctx)
+		err = t.delete(ctx)
 	} else {
-		reconcileErr = t.update(ctx)
+		err = t.update(ctx)
 	}
-	if reconcileErr != nil {
-		t.setFailed(reconcileErr)
+	if err != nil {
+		return err
 	}
 	updateMask := r.maskCalculator.Calculate(oldVolume, volume)
-
-	var updateErr error
-	if len(updateMask.GetPaths()) > 0 {
-		_, updateErr = r.volumesClient.Update(ctx, privatev1.VolumesUpdateRequest_builder{
-			Object:     volume,
-			UpdateMask: updateMask,
-		}.Build())
+	if len(updateMask.GetPaths()) == 0 {
+		return nil
 	}
 
-	if reconcileErr != nil {
-		if updateErr != nil {
-			r.logger.WarnContext(ctx, "Failed to persist status after reconciliation error",
-				slog.String("reconcile_error", reconcileErr.Error()),
-				slog.String("update_error", updateErr.Error()),
-			)
-		}
-		return reconcileErr
-	}
-	return updateErr
+	_, err = r.volumesClient.Update(ctx, privatev1.VolumesUpdateRequest_builder{
+		Object:     volume,
+		UpdateMask: updateMask,
+	}.Build())
+	return err
 }
 
 // update handles the non-delete path: adds the controller finalizer, sets

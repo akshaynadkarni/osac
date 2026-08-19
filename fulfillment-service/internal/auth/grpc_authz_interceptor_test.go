@@ -544,18 +544,18 @@ var _ = Describe("Rego authorization interceptor", func() {
 			),
 		)
 
-		// The CSI driver authenticates as a per-tenant Keycloak client
-		// 'osac-csi-<tenant>' whose service account is granted the dedicated
-		// 'osac-csi' realm role. Authorization keys on that role - assigned only
-		// by a realm administrator - not on the username, so an ordinary user
-		// cannot obtain CSI permissions by choosing a matching username
-		// (OSAC-3279). The token also carries the tenant's organization claim,
-		// which the application layer uses to scope volumes to that tenant.
+		// The CSI driver's Keycloak service account is granted the dedicated
+		// 'osac-csi-driver' realm role. Authorization keys on that role -
+		// assigned only by a realm administrator - not on the username, so an
+		// ordinary user cannot obtain CSI permissions by choosing a matching
+		// username (OSAC-3279). TEMPORARY (OSAC-4109): the driver uses a single
+		// shared client, so the identity is granted universal tenant scope; the
+		// tenant is carried on the request. Reverts to per-tenant scope when
+		// per-tenant 'osac-csi-driver-<tenant>' clients land (OSAC-4197).
 		createCSIToken := func() *jwt.Token {
-			return createKeycloakServiceAccountToken("osac-csi-acme", jwt.MapClaims{
-				"organization": []any{"acme"},
+			return createKeycloakServiceAccountToken("osac-csi-driver", jwt.MapClaims{
 				"realm_access": map[string]any{
-					"roles": []any{"osac-csi"},
+					"roles": []any{"osac-csi-driver"},
 				},
 			})
 		}
@@ -573,12 +573,12 @@ var _ = Describe("Rego authorization interceptor", func() {
 					},
 					func(ctx context.Context, req any) (any, error) {
 						subject := SubjectFromContext(ctx)
-						Expect(subject.User).To(Equal("service-account-osac-csi-acme"))
-						// The CSI identity is tenant-scoped, never universal: the
-						// application layer confines volumes to this tenant.
-						Expect(subject.Tenants.Universal()).To(BeFalse())
-						Expect(subject.Tenants.Finite()).To(BeTrue())
-						Expect(subject.Tenants.Inclusions()).To(ConsistOf("acme"))
+						Expect(subject.User).To(Equal("service-account-osac-csi-driver"))
+						// TEMPORARY (OSAC-4109): the shared CSI client is granted
+						// universal tenant scope; the tenant is carried on the
+						// request rather than enforced by identity. Reverts to
+						// tenant-scoped with per-tenant clients (OSAC-4197).
+						Expect(subject.Tenants.Universal()).To(BeTrue())
 						handled = true
 						return nil, nil
 					},
@@ -627,12 +627,12 @@ var _ = Describe("Rego authorization interceptor", func() {
 			Entry("Public Clusters Get", "/osac.public.v1.Clusters/Get"),
 		)
 
-		// Authorization must key on the 'osac-csi' realm role, not the username.
-		// An identity that merely looks like a CSI service account - whether a
-		// regular user with a CSI-shaped username or a service account without the
-		// role - must be denied.
+		// Authorization must key on the 'osac-csi-driver' realm role, not the
+		// username. An identity that merely looks like a CSI service account -
+		// whether a regular user with a CSI-shaped username or a service account
+		// without the role - must be denied.
 		DescribeTable(
-			"Denies identities that lack the osac-csi realm role on the Volume API",
+			"Denies identities that lack the osac-csi-driver realm role on the Volume API",
 			func(ctx context.Context, token *jwt.Token) {
 				ctx = ContextWithToken(ctx, token)
 				handled := false

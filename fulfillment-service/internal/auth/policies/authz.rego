@@ -140,13 +140,16 @@ is_tenant_idp_manager if {
   role in tenant_idp_manager_roles
 }
 
-# CSI driver realm roles. The OSAC CSI driver authenticates as a per-tenant Keycloak client
-# ("osac-csi-<tenant>") whose service account is granted the "osac-csi" realm role.
+# CSI driver realm roles. The OSAC CSI driver's Keycloak service account is granted the
+# "osac-csi-driver" realm role. The role name is distinct from VAST's array-side VMS role
+# "osac-csi-<tenant>" to avoid collision. Short term the driver uses a single shared client;
+# the end state is a per-tenant client ("osac-csi-driver-<tenant>") carrying that tenant's
+# organization claim.
 csi_client_roles := {
-  "osac-csi",
+  "osac-csi-driver",
 }
 
-# CSI driver identity. Authorization keys on the "osac-csi" realm role - assigned only by a
+# CSI driver identity. Authorization keys on the "osac-csi-driver" realm role - assigned only by a
 # realm administrator - rather than on the username. Keying on the username would be unsafe:
 # users and service accounts share the same username field, so an ordinary user could obtain
 # CSI permissions by choosing a matching username. The CSI driver is a restricted identity -
@@ -454,11 +457,24 @@ subject_user = split(input.auth.identity.user.username, ":")[3] if {
 subject_tenant_result = ["*"] if {
   is_admin
 }
+
+# TEMPORARY (shared CSI model, OSAC-4109): the CSI driver currently authenticates with a
+# single shared "osac-csi-driver" client that has no per-tenant organization claim, so it is
+# granted universal tenant scope here. The tenant a volume belongs to is carried on the
+# request (metadata.tenant, from the StorageClass "tenant" parameter) rather than enforced by
+# identity. This is a deliberate short-term shortcut: it means fulfillment does NOT enforce
+# tenant isolation by identity for CSI calls. Remove this rule (and the "not is_csi" guards
+# below) once per-tenant "osac-csi-driver-<tenant>" clients land - tracked in OSAC-4197.
+subject_tenant_result = ["*"] if {
+  is_csi
+}
 subject_tenant_result = subject_tenants if {
   not is_admin
+  not is_csi
   input.auth.identity.authnMethod == "jwt"
 }
 subject_tenant_result = [split(input.auth.identity.user.username, ":")[2]] if {
   not is_admin
+  not is_csi
   input.auth.identity.authnMethod == "serviceaccount"
 }

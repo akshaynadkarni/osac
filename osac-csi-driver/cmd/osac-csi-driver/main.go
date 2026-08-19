@@ -58,19 +58,23 @@ func main() {
 	var controlPlaneClient fulfillment.ControlPlaneClient
 
 	if *fulfillmentEndpoint != "" {
-		// Establish the gRPC connection to the fulfillment-service.
-		// TODO(OSAC-2872): use the connection to create real VolumeClient
-		// and ControlPlaneClient once the Volume API is implemented.
+		// Establish the gRPC connection to the fulfillment-service and back the
+		// real VolumeClient with it. The connection carries transport
+		// credentials and the per-RPC bearer token (see dialFulfillment).
 		conn, err := dialFulfillment(*fulfillmentEndpoint, *grpcInsecure, *fulfillmentTokenFile)
 		if err != nil {
 			klog.Fatalf("Failed to connect to fulfillment-service: %v", err)
 		}
 		defer func() { _ = conn.Close() }()
-		klog.Infof("Fulfillment endpoint: %s (connected, using stubs until Volume API is implemented)", *fulfillmentEndpoint)
+		klog.Infof("Fulfillment endpoint: %s (connected)", *fulfillmentEndpoint)
+		volumeClient = fulfillment.NewVolumeClient(conn)
 	} else {
-		klog.Infof("No fulfillment endpoint configured, using in-memory stubs")
+		klog.Infof("No fulfillment endpoint configured, using in-memory volume stub")
+		volumeClient = fulfillment.NewVolumeStub("default-backend", "nfs")
 	}
-	volumeClient = fulfillment.NewVolumeStub("default-backend", "nfs")
+
+	// Attach/publish still goes through the stub; the control-plane attach API
+	// is out of scope for OSAC-4109 (tracked separately in OSAC-3278/OSAC-4187).
 	controlPlaneClient = &fulfillment.ControlPlaneStub{}
 
 	d, err := driver.NewDriver(

@@ -140,15 +140,24 @@ is_tenant_idp_manager if {
   role in tenant_idp_manager_roles
 }
 
-# CSI driver identity. The OSAC CSI driver authenticates as a per-tenant Keycloak client
-# named "osac-csi-<tenant>", so its service-account username shares the
-# "service-account-osac-csi" prefix. It is a restricted identity - not an admin and not a
-# general client: it may only manage volumes through the private Volume API. Tenant scoping
-# is enforced by the application layer (generic server) via the identity's organization
-# claim; this policy only gates the method set.
+# CSI driver realm roles. The OSAC CSI driver authenticates as a per-tenant Keycloak client
+# ("osac-csi-<tenant>") whose service account is granted the "osac-csi" realm role.
+csi_client_roles := {
+  "osac-csi",
+}
+
+# CSI driver identity. Authorization keys on the "osac-csi" realm role - assigned only by a
+# realm administrator - rather than on the username. Keying on the username would be unsafe:
+# users and service accounts share the same username field, so an ordinary user could obtain
+# CSI permissions by choosing a matching username. The CSI driver is a restricted identity -
+# not an admin and not a general client: it may only manage volumes through the private
+# Volume API. Tenant scoping is enforced by the application layer (generic server) via the
+# identity's organization claim; this policy only gates the method set.
 default is_csi = false
 is_csi if {
-  startswith(subject_name, "service-account-osac-csi")
+  input.auth.identity.authnMethod == "jwt"
+  some role in subject_realm_roles
+  role in csi_client_roles
 }
 
 # Check if an account is a regular client (no admin, tenant management, or CSI roles):

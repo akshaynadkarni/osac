@@ -545,16 +545,25 @@ var _ = Describe("Rego authorization interceptor", func() {
 		)
 
 		// The CSI driver authenticates as a per-tenant Keycloak client
-		// 'osac-csi-<tenant>', so its service-account username shares the
-		// 'service-account-osac-csi' prefix and its token carries the tenant's
-		// organization claim (OSAC-3279).
+		// 'osac-csi-<tenant>' whose service account is granted the dedicated
+		// 'osac-csi' realm role. Authorization keys on that role - assigned only
+		// by a realm administrator - not on the username, so an ordinary user
+		// cannot obtain CSI permissions by choosing a matching username
+		// (OSAC-3279). The token also carries the tenant's organization claim,
+		// which the application layer uses to scope volumes to that tenant.
+		createCSIToken := func() *jwt.Token {
+			return createKeycloakServiceAccountToken("osac-csi-acme", jwt.MapClaims{
+				"organization": []any{"acme"},
+				"realm_access": map[string]any{
+					"roles": []any{"osac-csi"},
+				},
+			})
+		}
+
 		DescribeTable(
 			"Allows the CSI service account on the permitted private Volume methods",
 			func(ctx context.Context, method string) {
-				token := createKeycloakServiceAccountToken("osac-csi-acme", jwt.MapClaims{
-					"organization": []any{"acme"},
-				})
-				ctx = ContextWithToken(ctx, token)
+				ctx = ContextWithToken(ctx, createCSIToken())
 				handled := false
 				_, err := interceptor.UnaryServer(
 					ctx,
@@ -586,10 +595,7 @@ var _ = Describe("Rego authorization interceptor", func() {
 		DescribeTable(
 			"Denies the CSI service account outside the permitted Volume methods",
 			func(ctx context.Context, method string) {
-				token := createKeycloakServiceAccountToken("osac-csi-acme", jwt.MapClaims{
-					"organization": []any{"acme"},
-				})
-				ctx = ContextWithToken(ctx, token)
+				ctx = ContextWithToken(ctx, createCSIToken())
 				handled := false
 				_, err := interceptor.UnaryServer(
 					ctx,
@@ -619,6 +625,45 @@ var _ = Describe("Rego authorization interceptor", func() {
 			// even for methods a normal client could call.
 			Entry("Public Clusters Create", "/osac.public.v1.Clusters/Create"),
 			Entry("Public Clusters Get", "/osac.public.v1.Clusters/Get"),
+		)
+
+		// Authorization must key on the 'osac-csi' realm role, not the username.
+		// An identity that merely looks like a CSI service account - whether a
+		// regular user with a CSI-shaped username or a service account without the
+		// role - must be denied.
+		DescribeTable(
+			"Denies identities that lack the osac-csi realm role on the Volume API",
+			func(ctx context.Context, token *jwt.Token) {
+				ctx = ContextWithToken(ctx, token)
+				handled := false
+				_, err := interceptor.UnaryServer(
+					ctx,
+					nil,
+					&grpc.UnaryServerInfo{
+						FullMethod: "/osac.private.v1.Volumes/Create",
+					},
+					func(ctx context.Context, req any) (any, error) {
+						handled = true
+						return nil, nil
+					},
+				)
+				Expect(err).To(HaveOccurred())
+				status, ok := grpcstatus.FromError(err)
+				Expect(ok).To(BeTrue())
+				Expect(status.Code()).To(Equal(grpccodes.PermissionDenied))
+				Expect(status.Message()).To(Equal("permission denied"))
+				Expect(handled).To(BeFalse())
+			},
+			Entry(
+				"Regular user with a CSI-shaped username but no role",
+				createKeycloakUserToken("acme", "service-account-osac-csi-acme", nil),
+			),
+			Entry(
+				"Service account with a CSI-shaped name but no role",
+				createKeycloakServiceAccountToken("osac-csi-acme", jwt.MapClaims{
+					"organization": []any{"acme"},
+				}),
+			),
 		)
 
 		DescribeTable(

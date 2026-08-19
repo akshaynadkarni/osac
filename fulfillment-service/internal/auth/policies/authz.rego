@@ -140,12 +140,24 @@ is_tenant_idp_manager if {
   role in tenant_idp_manager_roles
 }
 
-# Check if an account is a regular client (no admin, tenant management roles):
+# CSI driver identity. The OSAC CSI driver authenticates as a per-tenant Keycloak client
+# named "osac-csi-<tenant>", so its service-account username shares the
+# "service-account-osac-csi" prefix. It is a restricted identity - not an admin and not a
+# general client: it may only manage volumes through the private Volume API. Tenant scoping
+# is enforced by the application layer (generic server) via the identity's organization
+# claim; this policy only gates the method set.
+default is_csi = false
+is_csi if {
+  startswith(subject_name, "service-account-osac-csi")
+}
+
+# Check if an account is a regular client (no admin, tenant management, or CSI roles):
 default is_client = false
 is_client if {
   not is_admin
   not is_tenant_admin
   not is_tenant_idp_manager
+  not is_csi
 }
 
 # Check if account has client-level permissions (clients, tenant admins, or IdP managers):
@@ -339,6 +351,20 @@ allow if {
 # Allow everything to admins:
 allow if {
   is_admin
+}
+
+# The CSI driver identity may only manage volumes through the private Volume API
+# (OSAC-3279). Tenant scoping is enforced by the application layer via the identity's
+# organization claim; this rule only gates the permitted method set. Publish/unpublish on
+# the internal Storage Control Plane API is handled separately (OSAC-3278).
+allow if {
+  is_csi
+  grpc_method in {
+    "/osac.private.v1.Volumes/Create",
+    "/osac.private.v1.Volumes/Get",
+    "/osac.private.v1.Volumes/Delete",
+    "/osac.private.v1.Volumes/List",
+  }
 }
 
 # Project authorization

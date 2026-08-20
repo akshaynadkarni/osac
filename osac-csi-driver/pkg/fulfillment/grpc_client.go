@@ -3,8 +3,11 @@ package fulfillment
 import (
 	"context"
 	"fmt"
+	"math"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	privatev1 "github.com/osac-project/osac/osac-csi-driver/internal/api/osac/private/v1"
 )
@@ -47,6 +50,9 @@ func (c *grpcVolumeClient) CreateVolume(ctx context.Context, params CreateVolume
 	spec.SetSizeGib(bytesToGiB(params.SizeBytes))
 	spec.SetAccessMode(toProtoAccessMode(params.AccessMode))
 
+	// params.ClusterID has no corresponding field on the private Volume API, so
+	// cluster provenance is intentionally not carried to fulfillment here.
+
 	vol := &privatev1.Volume{}
 	vol.SetMetadata(md)
 	vol.SetSpec(spec)
@@ -57,6 +63,9 @@ func (c *grpcVolumeClient) CreateVolume(ctx context.Context, params CreateVolume
 	resp, err := c.client.Create(ctx, req)
 	if err != nil {
 		return nil, err
+	}
+	if resp.GetObject() == nil {
+		return nil, status.Errorf(codes.Internal, "fulfillment returned no volume object for %q", params.PVCRef)
 	}
 	return volumeToInfo(resp.GetObject()), nil
 }
@@ -69,6 +78,9 @@ func (c *grpcVolumeClient) GetVolume(ctx context.Context, volumeID string) (*Vol
 	resp, err := c.client.Get(ctx, req)
 	if err != nil {
 		return nil, err
+	}
+	if resp.GetObject() == nil {
+		return nil, status.Errorf(codes.Internal, "fulfillment returned no volume object for id %q", volumeID)
 	}
 	return volumeToInfo(resp.GetObject()), nil
 }
@@ -109,12 +121,30 @@ func (c *grpcVolumeClient) DeleteVolume(ctx context.Context, volumeID string) er
 
 // bytesToGiB converts a byte count to whole GiB, rounding up so the provisioned
 // volume is never smaller than requested. A non-positive input yields 0, which
-// the server rejects with InvalidArgument.
+// the server rejects with InvalidArgument. It divides before adjusting for a
+// remainder so the rounding cannot overflow for byte counts near math.MaxInt64.
 func bytesToGiB(b int64) int64 {
 	if b <= 0 {
 		return 0
 	}
-	return (b + bytesPerGiB - 1) / bytesPerGiB
+	gib := b / bytesPerGiB
+	if b%bytesPerGiB != 0 {
+		gib++
+	}
+	return gib
+}
+
+// gibToBytes converts whole GiB to bytes, clamping at math.MaxInt64 to avoid
+// overflow (a negative capacity) on a malformed, excessively large
+// server-provided size.
+func gibToBytes(gib int64) int64 {
+	if gib <= 0 {
+		return 0
+	}
+	if gib > math.MaxInt64/bytesPerGiB {
+		return math.MaxInt64
+	}
+	return gib * bytesPerGiB
 }
 
 // toProtoAccessMode maps a CSI access-mode enum string
@@ -146,7 +176,7 @@ func volumeToInfo(v *privatev1.Volume) *VolumeInfo {
 	info := &VolumeInfo{
 		ID:            v.GetId(),
 		Name:          v.GetMetadata().GetName(),
-		CapacityBytes: v.GetSpec().GetSizeGib() * bytesPerGiB,
+		CapacityBytes: gibToBytes(v.GetSpec().GetSizeGib()),
 	}
 	if st := v.GetStatus(); st != nil {
 		info.State = fromProtoState(st.GetState())

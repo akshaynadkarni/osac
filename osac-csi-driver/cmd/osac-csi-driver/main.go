@@ -65,7 +65,11 @@ func main() {
 		if err != nil {
 			klog.Fatalf("Failed to connect to fulfillment-service: %v", err)
 		}
-		defer func() { _ = conn.Close() }()
+		defer func() {
+			if cerr := conn.Close(); cerr != nil {
+				klog.Warningf("error closing fulfillment-service connection: %v", cerr)
+			}
+		}()
 		klog.Infof("Fulfillment endpoint: %s (connected)", *fulfillmentEndpoint)
 		volumeClient = fulfillment.NewVolumeClient(conn)
 	} else {

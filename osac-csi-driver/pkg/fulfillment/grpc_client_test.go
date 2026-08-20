@@ -2,6 +2,7 @@ package fulfillment
 
 import (
 	"context"
+	"math"
 	"testing"
 
 	"google.golang.org/grpc"
@@ -225,10 +226,34 @@ func TestBytesToGiB(t *testing.T) {
 		{bytesPerGiB + 1, 2},
 		{5 * bytesPerGiB, 5},
 		{5*bytesPerGiB - 1, 5},
+		{1 << 62, 1 << 32}, // exact: 2^62 bytes / 2^30 = 2^32 GiB
 	}
 	for _, tc := range cases {
 		if got := bytesToGiB(tc.in); got != tc.want {
 			t.Errorf("bytesToGiB(%d) = %d, want %d", tc.in, got, tc.want)
+		}
+	}
+	// Near-max input must not overflow to a negative/zero result.
+	if got := bytesToGiB(math.MaxInt64); got <= 0 {
+		t.Errorf("bytesToGiB(MaxInt64) = %d, want a positive value (no overflow)", got)
+	}
+}
+
+func TestGibToBytes(t *testing.T) {
+	cases := []struct {
+		in   int64
+		want int64
+	}{
+		{0, 0},
+		{-1, 0},
+		{1, bytesPerGiB},
+		{5, 5 * bytesPerGiB},
+		{math.MaxInt64, math.MaxInt64}, // clamped, no overflow
+		{math.MaxInt64 / bytesPerGiB, (math.MaxInt64 / bytesPerGiB) * bytesPerGiB},
+	}
+	for _, tc := range cases {
+		if got := gibToBytes(tc.in); got != tc.want {
+			t.Errorf("gibToBytes(%d) = %d, want %d", tc.in, got, tc.want)
 		}
 	}
 }
@@ -276,5 +301,25 @@ func TestFromProtoStateAndProtocol(t *testing.T) {
 		if got := fromProtoProtocol(in); got != want {
 			t.Errorf("fromProtoProtocol(%v) = %q, want %q", in, got, want)
 		}
+	}
+}
+
+func TestCreateVolumeNilObjectErrors(t *testing.T) {
+	// Server returns a response with no object; the client must surface an error
+	// rather than (nil, nil), which the controller's poll loop would panic on.
+	fake := &fakeVolumesClient{createResp: &privatev1.VolumesCreateResponse{}}
+	c := &grpcVolumeClient{client: fake}
+	if _, err := c.CreateVolume(context.Background(), CreateVolumeParams{
+		Tenant: "t", Tier: "gold", SizeBytes: bytesPerGiB, AccessMode: "SINGLE_NODE_WRITER", PVCRef: "pvc-x",
+	}); status.Code(err) != codes.Internal {
+		t.Fatalf("expected Internal error for nil object, got %v", err)
+	}
+}
+
+func TestGetVolumeNilObjectErrors(t *testing.T) {
+	fake := &fakeVolumesClient{getResp: &privatev1.VolumesGetResponse{}}
+	c := &grpcVolumeClient{client: fake}
+	if _, err := c.GetVolume(context.Background(), "vol-1"); status.Code(err) != codes.Internal {
+		t.Fatalf("expected Internal error for nil object, got %v", err)
 	}
 }

@@ -84,6 +84,16 @@ const (
 	envAgentNamespace             = "OSAC_AGENT_NAMESPACE"
 	envBareMetalInstanceNamespace = "OSAC_BARE_METAL_INSTANCE_NAMESPACE"
 	envVolumeNamespace            = "OSAC_VOLUME_NAMESPACE"
+	// envStorageConfigNamespace is the namespace holding the per-tenant
+	// "vast-tenant-config-<tenant>" Secrets the Volume controller reads.
+	envStorageConfigNamespace = "OSAC_STORAGE_CONFIG_NAMESPACE"
+	// envVendorControllers maps StorageBackend names to vendor CSI controller
+	// gRPC endpoints, comma-separated (e.g.
+	// "vast=vast-csi-controller.osac-csi-backends.svc:50051").
+	envVendorControllers = "OSAC_VENDOR_CONTROLLERS"
+	// defaultStorageConfigNamespace mirrors the osac-aap/storage controller
+	// default used when OSAC_STORAGE_CONFIG_NAMESPACE is unset.
+	defaultStorageConfigNamespace = "osac-system"
 
 	// AAP configuration
 	envAAPURL                 = "OSAC_AAP_URL"
@@ -175,20 +185,21 @@ func registerControllerFlags() *controllerFlags {
 
 // enableAllIfNoneSet enables all controllers if none are explicitly enabled.
 //
-// The Volume controller is intentionally excluded: its VendorProvisioner is a
-// nil stub until OSAC-4138 wires the real vendor CSI client, so enabling it
-// would only leave Volumes stuck in Progressing/CREATING with no path to
-// success. It stays opt-in (--enable-volume-controller) until then. OSAC-4138
-// adds it back here and flips controllers.volume to true in the Helm values.
+// The Volume controller is included now that it has a real vendor provisioner.
+// When no vendor controllers are configured (OSAC_VENDOR_CONTROLLERS unset), the
+// controller still starts but runs with provisioning disabled: it never fails
+// the operator startup, so an unconfigured vendor backend cannot take down the
+// operator or the other controllers.
 func (f *controllerFlags) enableAllIfNoneSet() {
 	if !f.Tenant && !f.Storage && !f.Volume && !f.ComputeInstance && !f.Cluster && !f.Networking && !f.BareMetalInstance {
 		f.Tenant = true
 		f.Storage = true
+		f.Volume = true
 		f.ComputeInstance = true
 		f.Cluster = true
 		f.Networking = true
 		f.BareMetalInstance = true
-		setupLog.Info("no controller flags set, enabling all controllers except volume (no vendor provisioner configured)")
+		setupLog.Info("no controller flags set, enabling all controllers")
 	}
 }
 
@@ -547,16 +558,74 @@ func setupVolumeControllers(mgr mcmanager.Manager, grpcConn *grpc.ClientConn) er
 		}
 	}
 
-	// VendorProvisioner is nil until the real vendor CSI client is wired.
-	// The controller will set phase to Progressing and skip provisioning.
+	// Construct the vendor provisioner from OSAC_VENDOR_CONTROLLERS. A missing or
+	// invalid configuration is deliberately NOT fatal: the operator runs with
+	// volume provisioning disabled (nil provisioner) rather than crashing, so an
+	// unconfigured or misconfigured vendor backend can never take down the
+	// operator or the other controllers. Most setups (including LVMS/dev) have no
+	// vendor backend configured; their Volumes stay in Progressing until one is.
+	var provisioner controller.VendorProvisioner
+	endpoints, err := parseVendorControllers(os.Getenv(envVendorControllers))
+	switch {
+	case err != nil:
+		setupLog.Error(err, "invalid vendor controller config; volume provisioning disabled",
+			"env", envVendorControllers)
+	case len(endpoints) == 0:
+		setupLog.Info("no vendor controllers configured; volume provisioning disabled",
+			"env", envVendorControllers)
+	default:
+		configNamespace := os.Getenv(envStorageConfigNamespace)
+		if configNamespace == "" {
+			configNamespace = defaultStorageConfigNamespace
+		}
+		p, perr := controller.NewVastVendorProvisioner(
+			localMgr.GetAPIReader(),
+			configNamespace,
+			endpoints,
+		)
+		if perr != nil {
+			setupLog.Error(perr, "vendor provisioner init failed; volume provisioning disabled")
+		} else {
+			provisioner = p
+		}
+	}
+
 	if err := controller.NewVolumeReconciler(
 		mgr,
 		volumeNamespace,
-		nil,
+		provisioner,
 	).SetupWithManager(mgr); err != nil {
 		return fmt.Errorf("volume controller: %w", err)
 	}
 	return nil
+}
+
+// parseVendorControllers parses a comma-separated list of backend=endpoint pairs
+// (e.g. "vast=vast-csi-controller.osac-csi-backends.svc:50051") into a map from
+// StorageBackend name to vendor CSI controller gRPC endpoint. An empty input
+// yields an empty map, which the provisioner rejects at startup.
+func parseVendorControllers(s string) (map[string]string, error) {
+	result := make(map[string]string)
+	if s == "" {
+		return result, nil
+	}
+	for _, pair := range strings.Split(s, ",") {
+		pair = strings.TrimSpace(pair)
+		if pair == "" {
+			continue
+		}
+		parts := strings.SplitN(pair, "=", 2)
+		if len(parts) != 2 {
+			return nil, fmt.Errorf("invalid pair %q: expected format backend=endpoint", pair)
+		}
+		backend := strings.TrimSpace(parts[0])
+		endpoint := strings.TrimSpace(parts[1])
+		if backend == "" || endpoint == "" {
+			return nil, fmt.Errorf("invalid pair %q: backend and endpoint must not be empty", pair)
+		}
+		result[backend] = endpoint
+	}
+	return result, nil
 }
 
 // setupNetworkingControllers registers all networking controllers along with their

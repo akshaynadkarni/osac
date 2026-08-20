@@ -223,3 +223,68 @@ var _ = Describe("startComponents", func() {
 		Eventually(mgrStopped, 5*time.Second).Should(BeClosed())
 	})
 })
+
+var _ = Describe("parseVendorControllers", func() {
+	It("returns an empty map for empty input", func() {
+		m, err := parseVendorControllers("")
+		Expect(err).ToNot(HaveOccurred())
+		Expect(m).To(BeEmpty())
+	})
+
+	It("parses a single backend=endpoint pair", func() {
+		m, err := parseVendorControllers("vast=vast-csi-controller.osac-csi-backends.svc:50051")
+		Expect(err).ToNot(HaveOccurred())
+		Expect(m).To(Equal(map[string]string{
+			"vast": "vast-csi-controller.osac-csi-backends.svc:50051",
+		}))
+	})
+
+	It("parses multiple comma-separated pairs", func() {
+		m, err := parseVendorControllers("vast=vast.svc:50051,netapp=netapp.svc:50052")
+		Expect(err).ToNot(HaveOccurred())
+		Expect(m).To(Equal(map[string]string{
+			"vast":   "vast.svc:50051",
+			"netapp": "netapp.svc:50052",
+		}))
+	})
+
+	It("trims whitespace around pairs, backends, and endpoints", func() {
+		m, err := parseVendorControllers("  vast = vast.svc:50051 ,  netapp=netapp.svc:50052  ")
+		Expect(err).ToNot(HaveOccurred())
+		Expect(m).To(Equal(map[string]string{
+			"vast":   "vast.svc:50051",
+			"netapp": "netapp.svc:50052",
+		}))
+	})
+
+	It("skips empty pairs from trailing or doubled commas", func() {
+		m, err := parseVendorControllers("vast=vast.svc:50051,,")
+		Expect(err).ToNot(HaveOccurred())
+		Expect(m).To(Equal(map[string]string{"vast": "vast.svc:50051"}))
+	})
+
+	It("preserves ports in endpoints containing an equals sign", func() {
+		// SplitN with limit 2 keeps everything after the first '=' as the endpoint.
+		m, err := parseVendorControllers("vast=host:50051/path?a=b")
+		Expect(err).ToNot(HaveOccurred())
+		Expect(m).To(Equal(map[string]string{"vast": "host:50051/path?a=b"}))
+	})
+
+	It("errors on a pair missing the equals separator", func() {
+		_, err := parseVendorControllers("vast")
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("expected format backend=endpoint"))
+	})
+
+	It("errors on an empty backend", func() {
+		_, err := parseVendorControllers("=vast.svc:50051")
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("backend and endpoint must not be empty"))
+	})
+
+	It("errors on an empty endpoint", func() {
+		_, err := parseVendorControllers("vast=")
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("backend and endpoint must not be empty"))
+	})
+})

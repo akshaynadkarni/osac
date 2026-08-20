@@ -54,14 +54,20 @@ type VendorProvisioner interface {
 }
 
 // VendorCreateVolumeRequest carries the parameters the vendor needs to
-// provision a volume. Backend is resolved by the fulfillment-service tier
-// resolution (OSAC-3277) before the Volume CR is created; the operator
-// passes it through to the vendor without re-resolving.
+// provision a volume. Backend and Protocol are resolved by the
+// fulfillment-service tier resolution (OSAC-3277) before the Volume CR is
+// created; the operator passes them through to the vendor without re-resolving.
+// Tenant and Tier let the vendor implementation select the per-tenant
+// credentials and construct the per-tenant/per-tier vendor resource references
+// (e.g. the VAST subsystem/view name) without re-deriving them.
 type VendorCreateVolumeRequest struct {
 	Name       string
 	Backend    string
+	Tenant     string
+	Tier       string
 	SizeGiB    int64
 	AccessMode v1alpha1.VolumeAccessMode
+	Protocol   v1alpha1.VolumeProtocol
 }
 
 // VendorCreateVolumeResponse carries the vendor-assigned identifiers that the
@@ -72,10 +78,13 @@ type VendorCreateVolumeResponse struct {
 	Protocol       string
 }
 
-// VendorDeleteVolumeRequest identifies the vendor volume to deprovision.
+// VendorDeleteVolumeRequest identifies the vendor volume to deprovision. Tenant
+// lets the vendor implementation select the per-tenant credentials needed to
+// authenticate the deprovision call.
 type VendorDeleteVolumeRequest struct {
 	VendorVolumeID string
 	Backend        string
+	Tenant         string
 }
 
 // VolumeReconciler reconciles Volume CRs created by the fulfillment-service
@@ -164,8 +173,6 @@ func (r *VolumeReconciler) Reconcile(ctx context.Context, req mcreconcile.Reques
 // is present, sets the initial phase to Progressing, and delegates to
 // handleProvisioning if the volume has not yet reached Ready.
 func (r *VolumeReconciler) handleUpdate(ctx context.Context, vol *v1alpha1.Volume) (ctrl.Result, error) {
-	log := ctrllog.FromContext(ctx)
-
 	if controllerutil.AddFinalizer(vol, osacVolumeFinalizer) {
 		if err := r.Update(ctx, vol); err != nil {
 			return ctrl.Result{}, err
@@ -174,14 +181,6 @@ func (r *VolumeReconciler) handleUpdate(ctx context.Context, vol *v1alpha1.Volum
 
 	if vol.Status.Phase == "" {
 		vol.Status.Phase = v1alpha1.VolumePhaseProgressing
-	}
-
-	if r.VendorProvisioner == nil {
-		// Temporary: VendorProvisioner is nil until the real vendor CSI client
-		// is wired in the CSI driver integration PR. Remove this guard once a
-		// concrete implementation is always passed to NewVolumeReconciler.
-		log.Info("no vendor provisioner configured, skipping provisioning")
-		return ctrl.Result{}, nil
 	}
 
 	// Already provisioned; nothing to do until spec changes (future: resize).
@@ -209,11 +208,26 @@ func (r *VolumeReconciler) handleUpdate(ctx context.Context, vol *v1alpha1.Volum
 func (r *VolumeReconciler) handleProvisioning(ctx context.Context, vol *v1alpha1.Volume) (ctrl.Result, error) {
 	log := ctrllog.FromContext(ctx)
 
+	// No vendor provisioner configured (OSAC_VENDOR_CONTROLLERS unset). Leave the
+	// volume in Progressing and skip provisioning instead of dereferencing a nil
+	// provisioner. Most setups (including LVMS/dev) run without a vendor storage
+	// backend configured; the Volume controller must not take the operator or
+	// other controllers down when it is unconfigured. Provisioning resumes once a
+	// vendor controller is configured.
+	if r.VendorProvisioner == nil {
+		log.Info("no vendor provisioner configured; leaving volume in Progressing (provisioning skipped)")
+		vol.Status.Phase = v1alpha1.VolumePhaseProgressing
+		return ctrl.Result{}, nil
+	}
+
 	resp, err := r.VendorProvisioner.CreateVolume(ctx, VendorCreateVolumeRequest{
 		Name:       vol.Name,
 		Backend:    vol.Status.Backend,
+		Tenant:     vol.GetAnnotations()[osacTenantKey],
+		Tier:       vol.Spec.StorageTier,
 		SizeGiB:    vol.Spec.SizeGiB,
 		AccessMode: vol.Spec.AccessMode,
+		Protocol:   vol.Status.Protocol,
 	})
 	if err != nil {
 		log.Error(err, "vendor provisioning failed")
@@ -267,6 +281,7 @@ func (r *VolumeReconciler) handleDelete(ctx context.Context, vol *v1alpha1.Volum
 		err := r.VendorProvisioner.DeleteVolume(ctx, VendorDeleteVolumeRequest{
 			VendorVolumeID: vol.Status.VendorVolumeID,
 			Backend:        vol.Status.Backend,
+			Tenant:         vol.GetAnnotations()[osacTenantKey],
 		})
 		if err != nil {
 			log.Error(err, "vendor deprovisioning failed")

@@ -112,6 +112,14 @@ spec:
             value: {{ .Values.controllers.storage | quote }}
           - name: OSAC_ENABLE_VOLUME_CONTROLLER
             value: {{ .Values.controllers.volume | quote }}
+{{- if .Values.vendorControllers }}
+{{- $pairs := list }}
+{{- range $k, $v := .Values.vendorControllers }}
+{{- $pairs = append $pairs (printf "%s=%s" $k $v) }}
+{{- end }}
+          - name: OSAC_VENDOR_CONTROLLERS
+            value: {{ join "," $pairs | quote }}
+{{- end }}
         securityContext:
           allowPrivilegeEscalation: false
           readOnlyRootFilesystem: true

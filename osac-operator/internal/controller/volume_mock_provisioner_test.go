@@ -29,6 +29,12 @@ type MockVendorProvisioner struct {
 	createCount atomic.Int64
 	deleteCount atomic.Int64
 
+	// LastCreateReq and LastDeleteReq record the most recent request the
+	// controller passed in, so tests can assert the controller populates the
+	// vendor request fields (tenant, tier, protocol, backend, ...) correctly.
+	LastCreateReq VendorCreateVolumeRequest
+	LastDeleteReq VendorDeleteVolumeRequest
+
 	// CreateErr, when non-nil, is returned by CreateVolume instead of
 	// succeeding. Allows tests to simulate vendor failures.
 	CreateErr error
@@ -47,6 +53,7 @@ func NewMockVendorProvisioner() *MockVendorProvisioner {
 // "mock-" plus a monotonic counter. Backend and protocol are fixed
 // strings suitable for test assertions.
 func (m *MockVendorProvisioner) CreateVolume(_ context.Context, req VendorCreateVolumeRequest) (VendorCreateVolumeResponse, error) {
+	m.LastCreateReq = req
 	n := m.createCount.Add(1)
 	if m.CreateErr != nil {
 		return VendorCreateVolumeResponse{}, m.CreateErr
@@ -59,7 +66,8 @@ func (m *MockVendorProvisioner) CreateVolume(_ context.Context, req VendorCreate
 }
 
 // DeleteVolume records the call and returns DeleteErr (nil by default).
-func (m *MockVendorProvisioner) DeleteVolume(_ context.Context, _ VendorDeleteVolumeRequest) error {
+func (m *MockVendorProvisioner) DeleteVolume(_ context.Context, req VendorDeleteVolumeRequest) error {
+	m.LastDeleteReq = req
 	m.deleteCount.Add(1)
 	return m.DeleteErr
 }

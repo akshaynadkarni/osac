@@ -31,10 +31,20 @@ controllers:
   networking: true
   bareMetalInstance: true
   storage: true
-  # Disabled until OSAC-4138 wires the vendor CSI provisioner; enabling it now
-  # would only leave Volumes stuck in CREATING (nil provisioner). Flip to true
-  # as part of OSAC-4138.
-  volume: false
+  # The Volume controller provisions volumes via the vendor CSI controllers.
+  # Safe to leave enabled even without a vendor backend: when vendorControllers
+  # is empty the controller starts with provisioning disabled (Volumes stay in
+  # Progressing) and never fails operator startup.
+  volume: true
+
+# vendorControllers maps StorageBackend names to their vendor CSI controller
+# gRPC endpoints, rendered into OSAC_VENDOR_CONTROLLERS for the Volume
+# controller. Optional: leave empty on setups with no vendor storage backend
+# (e.g. LVMS/dev) — provisioning is disabled until a backend is configured.
+# Example:
+#   vendorControllers:
+#     vast: vast-csi-controller.osac-csi-backends.svc:50051
+vendorControllers: {}
 
 configSecret:
   name: "osac-config"

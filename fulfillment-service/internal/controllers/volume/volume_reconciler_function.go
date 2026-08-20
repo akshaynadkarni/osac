@@ -198,6 +198,15 @@ func (t *task) update(ctx context.Context) error {
 		if err != nil {
 			return controllers.HandleK8sWriteError(ctx, t.r.logger, err, t.setFailed)
 		}
+		// Populate status.backend/protocol from the resolved private volume so the
+		// operator can select the vendor controller endpoint and protocol on the
+		// first provisioning reconcile, before any vendor round-trip. Status is a
+		// subresource, so it is set with a separate update after Create.
+		newObject.Status.Backend = t.volume.GetStatus().GetBackend()
+		newObject.Status.Protocol = protoProtocolToCRD(t.volume.GetStatus().GetProtocol())
+		if err = t.hubClient.Status().Update(ctx, newObject); err != nil {
+			return controllers.HandleK8sWriteError(ctx, t.r.logger, err, t.setFailed)
+		}
 		t.r.logger.DebugContext(
 			ctx,
 			"Created volume",
@@ -421,5 +430,19 @@ func protoAccessModeToCRD(mode privatev1.VolumeAccessMode) osacv1alpha1.VolumeAc
 		return osacv1alpha1.VolumeAccessModeReadWriteOncePod
 	default:
 		return osacv1alpha1.VolumeAccessModeReadWriteOnce
+	}
+}
+
+// protoProtocolToCRD maps the resolved storage protocol from the private Volume
+// status onto the CRD status protocol. An unspecified protocol maps to the empty
+// value, which the operator treats as not-yet-resolved.
+func protoProtocolToCRD(protocol privatev1.StorageProtocol) osacv1alpha1.VolumeProtocol {
+	switch protocol {
+	case privatev1.StorageProtocol_STORAGE_PROTOCOL_NFS:
+		return osacv1alpha1.VolumeProtocolNFS
+	case privatev1.StorageProtocol_STORAGE_PROTOCOL_BLOCK:
+		return osacv1alpha1.VolumeProtocolBlock
+	default:
+		return ""
 	}
 }

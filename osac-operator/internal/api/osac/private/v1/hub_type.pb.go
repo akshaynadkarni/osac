@@ -22,7 +22,7 @@
 package privatev1
 
 import (
-	_ "github.com/osac-project/osac/osac-operator/internal/dummy/cleanapi"
+	_ "github.com/osac-project/osac/osac-operator/internal/api/cleanapi"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"

@@ -153,6 +153,23 @@ var _ = Describe("clusterOrderStallThresholdsFromEnv", func() {
 	})
 })
 
+var _ = Describe("tenant CSI fulfillment configuration", func() {
+	BeforeEach(func() {
+		for _, variable := range []string{envFulfillmentEndpoint, envFulfillmentIssuerURL} {
+			Expect(os.Unsetenv(variable)).To(Succeed())
+		}
+	})
+
+	It("reads endpoint and issuer values from the operator environment", func() {
+		Expect(os.Setenv(envFulfillmentEndpoint, "fulfillment-api.example.com:443")).To(Succeed())
+		Expect(os.Setenv(envFulfillmentIssuerURL, "https://keycloak.example.com/realms/osac")).To(Succeed())
+
+		endpoint, issuerURL := fulfillmentConfigFromEnv()
+		Expect(endpoint).To(Equal("fulfillment-api.example.com:443"))
+		Expect(issuerURL).To(Equal("https://keycloak.example.com/realms/osac"))
+	})
+})
+
 var _ = Describe("startComponents", func() {
 	It("should succeed with manager only (no remote cluster or provider)", func() {
 		ctx, cancel := context.WithCancel(context.Background())

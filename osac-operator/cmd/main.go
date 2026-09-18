@@ -291,13 +291,14 @@ func createAAPProvider(
 	statusPollInterval := helpers.GetEnvWithDefault(envAAPStatusPollInterval, provisioning.DefaultStatusPollInterval)
 
 	aapClient := aap.NewClient(aapURL, aapToken, aapInsecureSkipVerify)
+	fulfillmentEndpoint, fulfillmentIssuerURL := fulfillmentConfigFromEnv()
 	config := provisioning.ProviderConfig{
 		AAPClient:            aapClient,
 		ProvisionTemplate:    provisionTemplate,
 		DeprovisionTemplate:  deprovisionTemplate,
 		TemplatePrefix:       templatePrefix,
-		FulfillmentEndpoint:  os.Getenv(envFulfillmentEndpoint),
-		FulfillmentIssuerURL: os.Getenv(envFulfillmentIssuerURL),
+		FulfillmentEndpoint:  fulfillmentEndpoint,
+		FulfillmentIssuerURL: fulfillmentIssuerURL,
 	}
 
 	provider, err := provisioning.NewProvider(config)
@@ -314,6 +315,10 @@ func createAAPProvider(
 		"insecureSkipVerify", aapInsecureSkipVerify)
 
 	return provider, statusPollInterval, nil
+}
+
+func fulfillmentConfigFromEnv() (string, string) {
+	return os.Getenv(envFulfillmentEndpoint), os.Getenv(envFulfillmentIssuerURL)
 }
 
 // createAAPProviderFromEnv creates an AAP provider by reading shared env vars

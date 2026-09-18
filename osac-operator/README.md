@@ -95,6 +95,12 @@ Networking controllers derive template names from the prefix:
 - `OSAC_FULFILLMENT_ISSUER_URL` — OAuth issuer URL passed to tenant-cluster CSI
   provisioning.
 
+When the umbrella chart enables both the operator and CSI driver, it renders
+`osac-fulfillment-config` from the resolved Helm values and projects these two
+keys into the operator environment. This ConfigMap is the runtime bridge from
+Helm configuration to the operator process. It contains no credentials; the
+CSI client ID and secret remain in the separate credential Secret.
+
 ### Controller enable flags
 
 Each controller can be enabled or disabled. If none of these are set, all

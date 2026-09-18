@@ -165,6 +165,17 @@ var _ = Describe("NewProvider", func() {
 		})
 	})
 
+	Context("AAP provider with an insecure issuer URL", func() {
+		It("should reject an issuer URL that does not use HTTPS", func() {
+			_, err := provisioning.NewProvider(provisioning.ProviderConfig{
+				AAPClient:            aapClient,
+				FulfillmentEndpoint:  "fulfillment-api.example.com:443",
+				FulfillmentIssuerURL: "http://keycloak.example.com/realms/osac",
+			})
+			Expect(err).To(MatchError("AAP provider requires FulfillmentIssuerURL to be an absolute HTTPS URL"))
+		})
+	})
+
 	Context("AAP provider with fulfillment configuration", func() {
 		It("should add endpoint and issuer to AAP extra vars", func() {
 			aapClient.launchJobTemplateFunc = func(ctx context.Context, req aap.LaunchJobTemplateRequest) (*aap.LaunchJobTemplateResponse, error) {

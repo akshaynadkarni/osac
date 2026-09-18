@@ -2,6 +2,7 @@ package provisioning
 
 import (
 	"fmt"
+	"net/url"
 	"time"
 )
 
@@ -30,6 +31,12 @@ func NewProvider(config ProviderConfig) (ProvisioningProvider, error) {
 	}
 	if (config.FulfillmentEndpoint == "") != (config.FulfillmentIssuerURL == "") {
 		return nil, fmt.Errorf("AAP provider requires both FulfillmentEndpoint and FulfillmentIssuerURL")
+	}
+	if config.FulfillmentIssuerURL != "" {
+		issuerURL, err := url.Parse(config.FulfillmentIssuerURL)
+		if err != nil || issuerURL.Scheme != "https" || issuerURL.Host == "" {
+			return nil, fmt.Errorf("AAP provider requires FulfillmentIssuerURL to be an absolute HTTPS URL")
+		}
 	}
 	return &AAPProvider{
 		client:               config.AAPClient,

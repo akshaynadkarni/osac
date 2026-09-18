@@ -36,11 +36,6 @@ spec:
           - secretRef:
               name: {{ .Values.configSecret.name }}
               optional: {{ .Values.configSecret.optional }}
-          {{- if .Values.fulfillment.configMap.name }}
-          - configMapRef:
-              name: {{ .Values.fulfillment.configMap.name }}
-              optional: {{ .Values.fulfillment.configMap.optional }}
-          {{- end }}
         env:
           - name: OSAC_AAP_URL
             value: {{ .Values.aap.url | default "http://osac-aap/api/controller" | quote }}
@@ -91,6 +86,20 @@ spec:
             value: {{ .Values.fulfillment.serverAddress | default "fulfillment-internal-api:8001" | quote }}
           - name: OSAC_FULFILLMENT_TOKEN_FILE
             value: {{ .Values.fulfillment.tokenFile | default "/var/run/secrets/kubernetes.io/serviceaccount/token" | quote }}
+          {{- if .Values.fulfillment.configMap.name }}
+          - name: OSAC_FULFILLMENT_ENDPOINT
+            valueFrom:
+              configMapKeyRef:
+                name: {{ .Values.fulfillment.configMap.name }}
+                key: OSAC_FULFILLMENT_ENDPOINT
+                optional: {{ .Values.fulfillment.configMap.optional }}
+          - name: OSAC_FULFILLMENT_ISSUER_URL
+            valueFrom:
+              configMapKeyRef:
+                name: {{ .Values.fulfillment.configMap.name }}
+                key: OSAC_FULFILLMENT_ISSUER_URL
+                optional: {{ .Values.fulfillment.configMap.optional }}
+          {{- end }}
           - name: OSAC_CLUSTER_ORDER_NAMESPACE
             valueFrom:
               fieldRef:

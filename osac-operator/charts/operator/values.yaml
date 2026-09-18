@@ -29,6 +29,9 @@ stall:
 fulfillment:
   serverAddress: ""
   tokenFile: ""
+  configMap:
+    name: ""
+    optional: true
 
 controllers:
   tenant: true

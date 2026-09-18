@@ -105,6 +105,10 @@ const (
 	envAAPInsecureSkipVerify  = "OSAC_AAP_INSECURE_SKIP_VERIFY"
 	envAAPTemplatePrefix      = "OSAC_AAP_TEMPLATE_PREFIX"
 
+	// External fulfillment configuration passed to tenant-cluster AAP jobs
+	envFulfillmentEndpoint  = "OSAC_FULFILLMENT_ENDPOINT"
+	envFulfillmentIssuerURL = "OSAC_FULFILLMENT_ISSUER_URL"
+
 	// Cluster (ClusterOrder) AAP template overrides
 	envClusterAAPProvisionTemplate                  = "OSAC_CLUSTER_AAP_PROVISION_TEMPLATE"
 	envClusterAAPDeprovisionTemplate                = "OSAC_CLUSTER_AAP_DEPROVISION_TEMPLATE"
@@ -288,10 +292,12 @@ func createAAPProvider(
 
 	aapClient := aap.NewClient(aapURL, aapToken, aapInsecureSkipVerify)
 	config := provisioning.ProviderConfig{
-		AAPClient:           aapClient,
-		ProvisionTemplate:   provisionTemplate,
-		DeprovisionTemplate: deprovisionTemplate,
-		TemplatePrefix:      templatePrefix,
+		AAPClient:            aapClient,
+		ProvisionTemplate:    provisionTemplate,
+		DeprovisionTemplate:  deprovisionTemplate,
+		TemplatePrefix:       templatePrefix,
+		FulfillmentEndpoint:  os.Getenv(envFulfillmentEndpoint),
+		FulfillmentIssuerURL: os.Getenv(envFulfillmentIssuerURL),
 	}
 
 	provider, err := provisioning.NewProvider(config)

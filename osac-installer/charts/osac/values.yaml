@@ -15,6 +15,10 @@ global:
   # OpenShift cluster. Leave empty for platforms (e.g. kind) that set these
   # three values explicitly instead.
   clusterDomain: ""
+  # Resolved external fulfillment endpoint used by tenant-cluster CSI jobs.
+  # Leave empty to derive <service.externalHostname>:443 for OpenShift.
+  fulfillment:
+    endpoint: ""
   # --- Service Enablement ---
   # Controls which service tiers are active across all OSAC components.
   # When all are true (the default), OSAC operates as a full-stack cloud.
@@ -76,6 +80,9 @@ operator:
   fulfillment:
     serverAddress: "fulfillment-internal-api:8001"
     tokenFile: "/var/run/secrets/kubernetes.io/serviceaccount/token"
+    configMap:
+      name: "osac-fulfillment-config"
+      optional: true
   controllers:
     tenant: true
     networking: true

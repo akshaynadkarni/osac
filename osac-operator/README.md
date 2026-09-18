@@ -89,6 +89,11 @@ Networking controllers derive template names from the prefix:
 - `OSAC_FULFILLMENT_SERVER_ADDRESS` — fulfillment service gRPC address
   (e.g. `fulfillment-service:50051`).
 - `OSAC_FULFILLMENT_TOKEN_FILE` — path to file containing the gRPC auth token.
+- `OSAC_FULFILLMENT_ENDPOINT` — externally reachable fulfillment service gRPC
+  address passed to tenant-cluster CSI provisioning (e.g.
+  `fulfillment-api.example.com:443`).
+- `OSAC_FULFILLMENT_ISSUER_URL` — OAuth issuer URL passed to tenant-cluster CSI
+  provisioning.
 
 ### Controller enable flags
 

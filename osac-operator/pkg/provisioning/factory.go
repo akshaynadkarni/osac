@@ -10,6 +10,11 @@ type ProviderConfig struct {
 	AAPClient           AAPClient
 	ProvisionTemplate   string
 	DeprovisionTemplate string
+	// FulfillmentEndpoint and FulfillmentIssuerURL are forwarded to AAP for
+	// tenant-cluster CSI provisioning. They are deployment configuration, not
+	// credentials.
+	FulfillmentEndpoint  string
+	FulfillmentIssuerURL string
 
 	// TemplatePrefix enables convention-based template name resolution for AAP.
 	// When set, template names are derived from the resource Kind:
@@ -23,11 +28,16 @@ func NewProvider(config ProviderConfig) (ProvisioningProvider, error) {
 	if config.AAPClient == nil {
 		return nil, fmt.Errorf("AAP provider requires AAPClient")
 	}
+	if (config.FulfillmentEndpoint == "") != (config.FulfillmentIssuerURL == "") {
+		return nil, fmt.Errorf("AAP provider requires both FulfillmentEndpoint and FulfillmentIssuerURL")
+	}
 	return &AAPProvider{
-		client:              config.AAPClient,
-		provisionTemplate:   config.ProvisionTemplate,
-		deprovisionTemplate: config.DeprovisionTemplate,
-		templatePrefix:      config.TemplatePrefix,
+		client:               config.AAPClient,
+		provisionTemplate:    config.ProvisionTemplate,
+		deprovisionTemplate:  config.DeprovisionTemplate,
+		templatePrefix:       config.TemplatePrefix,
+		fulfillmentEndpoint:  config.FulfillmentEndpoint,
+		fulfillmentIssuerURL: config.FulfillmentIssuerURL,
 	}, nil
 }
 

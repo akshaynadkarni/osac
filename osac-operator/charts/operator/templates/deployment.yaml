@@ -36,6 +36,11 @@ spec:
           - secretRef:
               name: {{ .Values.configSecret.name }}
               optional: {{ .Values.configSecret.optional }}
+          {{- if .Values.fulfillment.configMap.name }}
+          - configMapRef:
+              name: {{ .Values.fulfillment.configMap.name }}
+              optional: {{ .Values.fulfillment.configMap.optional }}
+          {{- end }}
         env:
           - name: OSAC_AAP_URL
             value: {{ .Values.aap.url | default "http://osac-aap/api/controller" | quote }}

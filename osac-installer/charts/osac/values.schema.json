@@ -12,53 +12,16 @@
           "type": "string",
           "description": "OpenShift cluster ingress domain (e.g. apps.mycluster.example.com). Backs the tpl-templated defaults for service.auth.issuerUrl, service.idp.url, and service.vault.keycloakIssuerUrl. Set via --set global.clusterDomain=$(oc get ingresses.config/cluster -o jsonpath='{.spec.domain}'). Leave empty on platforms (e.g. kind) that set those three values explicitly instead."
         },
-        "osacDeploymentId": {
-          "type": "string",
-          "description": "Required stable identity for this OSAC/fulfillment-service deployment"
-        }
-      }
-    },
-    "cliImage": {
-      "type": "string",
-      "description": "Default OpenShift CLI image used by hook jobs"
-    },
-    "dbInit": {
-      "type": "object",
-      "description": "Shared PostgreSQL host for the db-init hook",
-      "properties": {
-        "host": {
-          "type": "string",
-          "description": "PostgreSQL host for db-init hook",
-          "default": "postgres.osac-infra.svc.cluster.local"
-        }
-      }
-    },
-    "kafka": {
-      "type": "object",
-      "description": "Kafka cluster coordinates for per-instance topic/user creation",
-      "properties": {
-        "clusterName": {
-          "type": "string",
-          "description": "Strimzi Kafka cluster name",
-          "default": "osac-kafka"
+        "fulfillment": {
+          "type": "object",
+          "description": "Resolved external fulfillment configuration shared with tenant-cluster CSI provisioning",
+          "properties": {
+            "endpoint": {
+              "type": "string",
+              "description": "External fulfillment gRPC endpoint including port. When empty, service.externalHostname:443 is used when CSI is enabled."
+            }
+          }
         },
-        "clusterNamespace": {
-          "type": "string",
-          "description": "Namespace of the Kafka cluster",
-          "default": "osac-kafka"
-        },
-        "replicas": {
-          "type": "integer",
-          "description": "Kafka broker replica count (drives topic replication factor)",
-          "default": 3,
-          "minimum": 1
-        }
-      }
-    },
-    "global": {
-      "type": "object",
-      "description": "Global values propagated to all subcharts via Helm's built-in global mechanism",
-      "properties": {
         "services": {
           "type": "object",
           "description": "Service tier enablement flags. Controls which tiers are active across all OSAC components.",
@@ -112,6 +75,43 @@
         "osacDeploymentId": {
           "type": "string",
           "description": "Required stable identity for this OSAC/fulfillment-service deployment"
+        }
+      }
+    },
+    "cliImage": {
+      "type": "string",
+      "description": "Default OpenShift CLI image used by hook jobs"
+    },
+    "dbInit": {
+      "type": "object",
+      "description": "Shared PostgreSQL host for the db-init hook",
+      "properties": {
+        "host": {
+          "type": "string",
+          "description": "PostgreSQL host for db-init hook",
+          "default": "postgres.osac-infra.svc.cluster.local"
+        }
+      }
+    },
+    "kafka": {
+      "type": "object",
+      "description": "Kafka cluster coordinates for per-instance topic/user creation",
+      "properties": {
+        "clusterName": {
+          "type": "string",
+          "description": "Strimzi Kafka cluster name",
+          "default": "osac-kafka"
+        },
+        "clusterNamespace": {
+          "type": "string",
+          "description": "Namespace of the Kafka cluster",
+          "default": "osac-kafka"
+        },
+        "replicas": {
+          "type": "integer",
+          "description": "Kafka broker replica count (drives topic replication factor)",
+          "default": 3,
+          "minimum": 1
         }
       }
     },
@@ -238,6 +238,22 @@
             "tokenFile": {
               "type": "string",
               "description": "Path to service account token file"
+            },
+            "configMap": {
+              "type": "object",
+              "description": "Optional non-secret external fulfillment configuration",
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "description": "Name of the ConfigMap containing external fulfillment configuration",
+                  "default": "osac-fulfillment-config"
+                },
+                "optional": {
+                  "type": "boolean",
+                  "description": "Allow the ConfigMap to be absent when external CSI configuration is disabled",
+                  "default": true
+                }
+              }
             }
           }
         },

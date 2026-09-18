@@ -154,4 +154,40 @@ var _ = Describe("NewProvider", func() {
 			Expect(err.Error()).To(ContainSubstring("template not configured"))
 		})
 	})
+
+	Context("AAP provider with incomplete fulfillment configuration", func() {
+		It("should reject an endpoint without an issuer URL", func() {
+			_, err := provisioning.NewProvider(provisioning.ProviderConfig{
+				AAPClient:           aapClient,
+				FulfillmentEndpoint: "fulfillment-api.example.com:443",
+			})
+			Expect(err).To(MatchError("AAP provider requires both FulfillmentEndpoint and FulfillmentIssuerURL"))
+		})
+	})
+
+	Context("AAP provider with fulfillment configuration", func() {
+		It("should add endpoint and issuer to AAP extra vars", func() {
+			aapClient.launchJobTemplateFunc = func(ctx context.Context, req aap.LaunchJobTemplateRequest) (*aap.LaunchJobTemplateResponse, error) {
+				jobVars := req.ExtraVars["osac_job_vars"].(map[string]any)
+				Expect(jobVars).To(HaveKeyWithValue("fulfillment_endpoint", "fulfillment-api.example.com:443"))
+				Expect(jobVars).To(HaveKeyWithValue("fulfillment_issuer_url", "https://keycloak.example.com/realms/osac"))
+				return &aap.LaunchJobTemplateResponse{JobID: 500}, nil
+			}
+
+			provider, err := provisioning.NewProvider(provisioning.ProviderConfig{
+				AAPClient:            aapClient,
+				ProvisionTemplate:    "provision-job",
+				FulfillmentEndpoint:  "fulfillment-api.example.com:443",
+				FulfillmentIssuerURL: "https://keycloak.example.com/realms/osac",
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			instance := &v1alpha1.ComputeInstance{
+				ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
+			}
+			result, err := provider.TriggerProvision(ctx, instance)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result.JobID).To(Equal("500"))
+		})
+	})
 })

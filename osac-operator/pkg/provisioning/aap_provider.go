@@ -31,10 +31,12 @@ type AAPClient interface {
 //   - Prefix-based: templatePrefix is set, and template names are derived from the
 //     resource Kind (e.g., prefix "osac" + Kind "VirtualNetwork" → "osac-create-virtual-network")
 type AAPProvider struct {
-	client              AAPClient
-	provisionTemplate   string
-	deprovisionTemplate string
-	templatePrefix      string
+	client               AAPClient
+	provisionTemplate    string
+	deprovisionTemplate  string
+	templatePrefix       string
+	fulfillmentEndpoint  string
+	fulfillmentIssuerURL string
 }
 
 // NewAAPProvider creates a new AAP provider with explicit template names.
@@ -240,7 +242,7 @@ func (p *AAPProvider) launchTemplate(ctx context.Context, templateName string, r
 		return "", fmt.Errorf("failed to get template: %w", err)
 	}
 
-	extraVars, err := extractExtraVars(ctx, resource)
+	extraVars, err := p.extractExtraVars(ctx, resource)
 	if err != nil {
 		return "", fmt.Errorf("failed to extract extra vars: %w", err)
 	}
@@ -272,6 +274,23 @@ func (p *AAPProvider) launchTemplate(ctx context.Context, templateName string, r
 	}
 
 	return strconv.Itoa(jobID), nil
+}
+
+// extractExtraVars adds provider-wide tenant CSI configuration to the common
+// resource payload without exposing client credentials.
+func (p *AAPProvider) extractExtraVars(ctx context.Context, resource client.Object) (map[string]any, error) {
+	extraVars, err := extractExtraVars(ctx, resource)
+	if err != nil {
+		return nil, err
+	}
+	if p.fulfillmentEndpoint == "" {
+		return extraVars, nil
+	}
+
+	jobVars := extraVars["osac_job_vars"].(map[string]any)
+	jobVars["fulfillment_endpoint"] = p.fulfillmentEndpoint
+	jobVars["fulfillment_issuer_url"] = p.fulfillmentIssuerURL
+	return extraVars, nil
 }
 
 // GetDeprovisionStatus checks deprovisioning job status via AAP API.

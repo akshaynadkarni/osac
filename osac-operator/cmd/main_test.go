@@ -156,6 +156,15 @@ var _ = Describe("clusterOrderStallThresholdsFromEnv", func() {
 var _ = Describe("tenant CSI fulfillment configuration", func() {
 	BeforeEach(func() {
 		for _, variable := range []string{envFulfillmentEndpoint, envFulfillmentIssuerURL} {
+			variable := variable
+			originalValue, wasSet := os.LookupEnv(variable)
+			DeferCleanup(func() {
+				if wasSet {
+					Expect(os.Setenv(variable, originalValue)).To(Succeed())
+					return
+				}
+				Expect(os.Unsetenv(variable)).To(Succeed())
+			})
 			Expect(os.Unsetenv(variable)).To(Succeed())
 		}
 	})

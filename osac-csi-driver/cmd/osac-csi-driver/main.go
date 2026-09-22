@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -25,6 +26,8 @@ var (
 	version   = "dev"
 	gitCommit = "unknown"
 )
+
+const tokenHTTPTimeout = 30 * time.Second
 
 func main() {
 	klog.InitFlags(nil)
@@ -199,17 +202,12 @@ func newClientCredentialsTokenSource(
 		return nil, fmt.Errorf("client secret file %s is empty", clientSecretFile)
 	}
 
-	tokenURL := buildTokenURL(issuerURL)
+	tokenURL, err := buildTokenURL(issuerURL)
+	if err != nil {
+		return nil, fmt.Errorf("building token URL: %w", err)
+	}
 
-	transport := http.DefaultTransport.(*http.Transport).Clone()
-	transport.TLSClientConfig = &tls.Config{
-		MinVersion:         tls.VersionTLS12,
-		InsecureSkipVerify: insecureSkipVerify, //nolint:gosec // user-controlled flag
-	}
-	httpClient := &http.Client{
-		Transport: transport,
-		Timeout:   30 * time.Second,
-	}
+	httpClient := newTokenHTTPClient(insecureSkipVerify)
 	ctx = context.WithValue(ctx, oauth2.HTTPClient, httpClient)
 
 	cfg := &clientcredentials.Config{
@@ -220,10 +218,36 @@ func newClientCredentialsTokenSource(
 	return cfg.TokenSource(ctx), nil
 }
 
+func newTokenHTTPClient(insecureSkipVerify bool) *http.Client {
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.TLSClientConfig = &tls.Config{
+		MinVersion:         tls.VersionTLS12,
+		InsecureSkipVerify: insecureSkipVerify, //nolint:gosec // user-controlled flag
+	}
+	return &http.Client{
+		Transport: transport,
+		Timeout:   tokenHTTPTimeout,
+	}
+}
+
 // buildTokenURL constructs the Keycloak token endpoint URL from the issuer URL.
-// It normalizes a trailing slash so callers don't have to.
-func buildTokenURL(issuerURL string) string {
-	return strings.TrimRight(issuerURL, "/") + "/protocol/openid-connect/token"
+// It normalizes a trailing slash so callers don't have to. Only HTTPS issuer
+// URLs with an authority are accepted because this URL is used for credentials.
+func buildTokenURL(issuerURL string) (string, error) {
+	parsed, err := url.Parse(issuerURL)
+	if err != nil {
+		return "", fmt.Errorf("invalid issuer URL: %w", err)
+	}
+	if parsed.Scheme != "https" || parsed.Host == "" {
+		return "", fmt.Errorf("issuer URL must be an absolute HTTPS URL")
+	}
+	if parsed.RawQuery != "" || parsed.Fragment != "" {
+		return "", fmt.Errorf("issuer URL must not contain a query or fragment")
+	}
+
+	parsed.Path = strings.TrimRight(parsed.Path, "/") + "/protocol/openid-connect/token"
+	parsed.RawPath = ""
+	return parsed.String(), nil
 }
 
 // parseBackendMap parses a comma-separated list of backend=value pairs into a

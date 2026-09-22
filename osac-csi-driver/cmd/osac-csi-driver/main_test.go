@@ -77,7 +77,10 @@ func TestValidateFulfillmentFlags(t *testing.T) {
 
 func TestBuildTokenURL(t *testing.T) {
 	t.Run("without trailing slash", func(t *testing.T) {
-		got := buildTokenURL("https://keycloak.example.com/realms/myrealm")
+		got, err := buildTokenURL("https://keycloak.example.com/realms/myrealm")
+		if err != nil {
+			t.Fatalf("buildTokenURL() returned error: %v", err)
+		}
 		want := "https://keycloak.example.com/realms/myrealm/protocol/openid-connect/token"
 		if got != want {
 			t.Fatalf("buildTokenURL() = %q, want %q", got, want)
@@ -85,12 +88,36 @@ func TestBuildTokenURL(t *testing.T) {
 	})
 
 	t.Run("with trailing slash", func(t *testing.T) {
-		got := buildTokenURL("https://keycloak.example.com/realms/myrealm/")
+		got, err := buildTokenURL("https://keycloak.example.com/realms/myrealm/")
+		if err != nil {
+			t.Fatalf("buildTokenURL() returned error: %v", err)
+		}
 		want := "https://keycloak.example.com/realms/myrealm/protocol/openid-connect/token"
 		if got != want {
 			t.Fatalf("buildTokenURL() = %q, want %q", got, want)
 		}
 	})
+
+	for _, issuerURL := range []string{
+		"http://keycloak.example.com/realms/myrealm",
+		"https://",
+		"https://keycloak.example.com/realms/myrealm?query=value",
+	} {
+		t.Run("rejects "+issuerURL, func(t *testing.T) {
+			if _, err := buildTokenURL(issuerURL); err == nil {
+				t.Fatalf("buildTokenURL(%q) returned no error", issuerURL)
+			}
+		})
+	}
+}
+
+func TestNewTokenHTTPClient(t *testing.T) {
+	if got := newTokenHTTPClient(false).Timeout; got != tokenHTTPTimeout {
+		t.Fatalf("token HTTP timeout = %s, want %s", got, tokenHTTPTimeout)
+	}
+	if got := newTokenHTTPClient(true).Timeout; got != tokenHTTPTimeout {
+		t.Fatalf("insecure token HTTP timeout = %s, want %s", got, tokenHTTPTimeout)
+	}
 }
 
 func TestNewClientCredentialsTokenSource(t *testing.T) {

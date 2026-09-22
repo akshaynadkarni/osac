@@ -101,8 +101,11 @@ keys into the operator environment. This ConfigMap is the runtime bridge from
 Helm configuration to the operator process. It contains no credentials; the
 CSI client ID and secret remain in the separate hub credential Secret. The
 umbrella chart also copies the non-secret values into the hub CSI namespace so
-the CSI controller can consume them directly. Tenant-cluster credentials are
-managed separately by the AAP storage-provider workflow.
+the CSI controller can consume them directly. The CSI namespace copy is
+immutable because it controls where the CSI controller sends its client
+credentials; changing it requires deliberate replacement and a rollout. Tenant
+cluster credentials are managed separately by the AAP storage-provider
+workflow.
 
 ### Controller enable flags
 

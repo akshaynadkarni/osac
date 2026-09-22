@@ -424,6 +424,7 @@ csi-render-test: helm-deps ## Verify CSI namespace and ConfigMap rendering modes
 			--set csiDriver.controller.fulfillment.allowStub=false > "$$csi_render"; \
 		test "$$(rg -c '^  OSAC_FULFILLMENT_ENDPOINT:' "$$csi_render")" -eq 1; \
 		rg -q 'namespace: osac-csi' "$$csi_render"; \
+		rg -q '^immutable: true$$' "$$csi_render"; \
 		helm template osac $(OSAC_CHART) \
 			--values charts/osac/ci/full-values.yaml > "$$full_render"; \
 		test "$$(rg -c '^  OSAC_FULFILLMENT_ENDPOINT:' "$$full_render")" -eq 2; \
@@ -445,6 +446,11 @@ csi-render-test: helm-deps ## Verify CSI namespace and ConfigMap rendering modes
 			--set csiDriver.enabled=true \
 			--set csiNamespace=not-osac-csi >/dev/null 2>&1; then \
 			echo 'infra CSI namespace override was unexpectedly accepted' >&2; \
+			exit 1; \
+		fi; \
+		if helm template csi-driver ../osac-csi-driver/charts/csi-driver \
+			--set namespace=not-osac-csi >/dev/null 2>&1; then \
+			echo 'standalone CSI namespace override was unexpectedly accepted' >&2; \
 			exit 1; \
 		fi; \
 		echo 'CSI render checks passed.'

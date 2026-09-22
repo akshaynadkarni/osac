@@ -33,6 +33,7 @@ kind: ConfigMap
 metadata:
   name: {{ $csiConfigMapName }}
   namespace: {{ $csiNamespace }}
+immutable: true
 data:
   OSAC_FULFILLMENT_ENDPOINT: {{ $endpoint | quote }}
   OSAC_FULFILLMENT_ISSUER_URL: {{ $issuer | quote }}

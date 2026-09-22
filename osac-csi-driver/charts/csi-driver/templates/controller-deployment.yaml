@@ -52,17 +52,14 @@ spec:
             {{- end }}
             {{- if $configMapName }}
             - "--fulfillment-endpoint=$(OSAC_FULFILLMENT_ENDPOINT)"
-            - "--fulfillment-client-id=$(FULFILLMENT_CLIENT_ID)"
-            - "--fulfillment-client-secret-file=/etc/osac-csi/credentials/client-secret"
             - "--fulfillment-issuer-url=$(OSAC_FULFILLMENT_ISSUER_URL)"
-            {{- if $fulfillment.tls.insecureSkipVerify }}
-            - "--grpc-insecure"
-            {{- end }}
             {{- else if and $endpoint $issuerURL }}
             - "--fulfillment-endpoint={{ $endpoint }}"
+            - "--fulfillment-issuer-url={{ $issuerURL }}"
+            {{- end }}
+            {{- if $configured }}
             - "--fulfillment-client-id=$(FULFILLMENT_CLIENT_ID)"
             - "--fulfillment-client-secret-file=/etc/osac-csi/credentials/client-secret"
-            - "--fulfillment-issuer-url={{ $issuerURL }}"
             {{- if $fulfillment.tls.insecureSkipVerify }}
             - "--grpc-insecure"
             {{- end }}

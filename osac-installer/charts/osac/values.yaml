@@ -358,7 +358,7 @@ csiDriver:
       # Shared hub CSI credentials. Tenant-cluster credentials are a separate
       # AAP/OSAC-4197 concern and are not created by this chart.
       configMap:
-        name: osac-fulfillment-config
+        name: osac-csi-fulfillment-config
         endpointKey: OSAC_FULFILLMENT_ENDPOINT
         issuerUrlKey: OSAC_FULFILLMENT_ISSUER_URL
       credentials:

@@ -448,6 +448,13 @@ csi-render-test: helm-deps ## Verify CSI namespace and ConfigMap rendering modes
 			echo 'infra CSI namespace override was unexpectedly accepted' >&2; \
 			exit 1; \
 		fi; \
+		if helm template osac $(OSAC_CHART) \
+			--values charts/osac/ci/full-values.yaml \
+			--namespace osac-csi \
+			--set csiDriver.controller.fulfillment.configMap.name=osac-fulfillment-config >/dev/null 2>&1; then \
+			echo 'same-namespace operator and CSI ConfigMap names were unexpectedly accepted' >&2; \
+			exit 1; \
+		fi; \
 		if helm template csi-driver ../osac-csi-driver/charts/csi-driver \
 			--set namespace=not-osac-csi >/dev/null 2>&1; then \
 			echo 'standalone CSI namespace override was unexpectedly accepted' >&2; \

@@ -1351,7 +1351,7 @@
                     "name": {
                       "type": "string",
                       "description": "ConfigMap containing non-secret fulfillment endpoint and issuer values",
-                      "default": "osac-fulfillment-config"
+                      "default": "osac-csi-fulfillment-config"
                     },
                     "endpointKey": {
                       "type": "string",

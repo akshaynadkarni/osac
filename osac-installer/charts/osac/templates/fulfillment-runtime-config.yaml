@@ -16,6 +16,9 @@ remain in the separate credential Secret.
 {{- if .Values.operator.enabled }}
 {{- $operatorConfigMapName = required "operator.fulfillment.configMap.name is required when operator.enabled and csiDriver.enabled are true" .Values.operator.fulfillment.configMap.name }}
 {{- end }}
+{{- if and .Values.operator.enabled (eq $csiNamespace .Release.Namespace) (eq $csiConfigMapName $operatorConfigMapName) }}
+{{- fail "operator and CSI ConfigMaps must use different names when they share a namespace" }}
+{{- end }}
 {{- if .Values.operator.enabled }}
 apiVersion: v1
 kind: ConfigMap

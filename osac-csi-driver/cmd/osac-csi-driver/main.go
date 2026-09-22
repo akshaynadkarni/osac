@@ -156,10 +156,7 @@ func dialFulfillment(
 	endpoint string, insecureSkipVerify bool,
 	clientID, clientSecretFile, issuerURL string,
 ) (*grpc.ClientConn, error) {
-	tlsCfg := &tls.Config{
-		MinVersion:         tls.VersionTLS12,
-		InsecureSkipVerify: insecureSkipVerify, //nolint:gosec // user-controlled flag
-	}
+	tlsCfg := newTLSConfig(insecureSkipVerify)
 	// The OpenShift router does not support ALPN, so we use the
 	// experimental credentials package that disables the ALPN check.
 	// See https://github.com/grpc/grpc-go/issues/434
@@ -220,13 +217,17 @@ func newClientCredentialsTokenSource(
 
 func newTokenHTTPClient(insecureSkipVerify bool) *http.Client {
 	transport := http.DefaultTransport.(*http.Transport).Clone()
-	transport.TLSClientConfig = &tls.Config{
-		MinVersion:         tls.VersionTLS12,
-		InsecureSkipVerify: insecureSkipVerify, //nolint:gosec // user-controlled flag
-	}
+	transport.TLSClientConfig = newTLSConfig(insecureSkipVerify)
 	return &http.Client{
 		Transport: transport,
 		Timeout:   tokenHTTPTimeout,
+	}
+}
+
+func newTLSConfig(insecureSkipVerify bool) *tls.Config {
+	return &tls.Config{
+		MinVersion:         tls.VersionTLS12,
+		InsecureSkipVerify: insecureSkipVerify, //nolint:gosec // user-controlled flag
 	}
 }
 
@@ -245,9 +246,11 @@ func buildTokenURL(issuerURL string) (string, error) {
 		return "", fmt.Errorf("issuer URL must not contain a query or fragment")
 	}
 
-	parsed.Path = strings.TrimRight(parsed.Path, "/") + "/protocol/openid-connect/token"
-	parsed.RawPath = ""
-	return parsed.String(), nil
+	tokenURL, err := url.JoinPath(parsed.String(), "protocol/openid-connect/token")
+	if err != nil {
+		return "", fmt.Errorf("building token URL path: %w", err)
+	}
+	return tokenURL, nil
 }
 
 // parseBackendMap parses a comma-separated list of backend=value pairs into a

@@ -16,6 +16,9 @@ tests:
           path: spec.template.spec.containers[0].args
           content: "--fulfillment-client-id=$(FULFILLMENT_CLIENT_ID)"
         any: true
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: "--allow-stub"
 
   - it: should include fulfillment args when endpoint is set
     set:

@@ -12,48 +12,54 @@ import (
 
 func TestValidateFulfillmentFlags(t *testing.T) {
 	t.Run("all empty is valid", func(t *testing.T) {
-		if err := validateFulfillmentFlags("", "", "", ""); err != nil {
+		if err := validateFulfillmentFlags("", "", "", "", true); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
 
+	t.Run("all empty without stub permission returns error", func(t *testing.T) {
+		if err := validateFulfillmentFlags("", "", "", "", false); err == nil {
+			t.Fatal("expected error when stub mode is not allowed")
+		}
+	})
+
 	t.Run("all set is valid", func(t *testing.T) {
-		err := validateFulfillmentFlags("ep", "id", "/path", "https://issuer")
+		err := validateFulfillmentFlags("ep", "id", "/path", "https://issuer", false)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
 
 	t.Run("only client-id set returns error", func(t *testing.T) {
-		err := validateFulfillmentFlags("", "id", "", "")
+		err := validateFulfillmentFlags("", "id", "", "", true)
 		if err == nil {
 			t.Fatal("expected error when only client-id is set")
 		}
 	})
 
 	t.Run("only secret-file set returns error", func(t *testing.T) {
-		err := validateFulfillmentFlags("", "", "/path", "")
+		err := validateFulfillmentFlags("", "", "/path", "", true)
 		if err == nil {
 			t.Fatal("expected error when only secret-file is set")
 		}
 	})
 
 	t.Run("only issuer-url set returns error", func(t *testing.T) {
-		err := validateFulfillmentFlags("", "", "", "https://issuer")
+		err := validateFulfillmentFlags("", "", "", "https://issuer", true)
 		if err == nil {
 			t.Fatal("expected error when only issuer-url is set")
 		}
 	})
 
 	t.Run("missing issuer-url returns error", func(t *testing.T) {
-		err := validateFulfillmentFlags("", "id", "/path", "")
+		err := validateFulfillmentFlags("", "id", "/path", "", true)
 		if err == nil {
 			t.Fatal("expected error when issuer-url is missing")
 		}
 	})
 
 	t.Run("endpoint without credentials returns error", func(t *testing.T) {
-		err := validateFulfillmentFlags("fulfillment.svc:8000", "", "", "")
+		err := validateFulfillmentFlags("fulfillment.svc:8000", "", "", "", true)
 		if err == nil {
 			t.Fatal("expected error when endpoint is set without credentials")
 		}
@@ -62,18 +68,17 @@ func TestValidateFulfillmentFlags(t *testing.T) {
 	t.Run("endpoint with credentials is valid", func(t *testing.T) {
 		err := validateFulfillmentFlags(
 			"fulfillment.svc:8000", "id", "/path", "https://issuer",
+			false,
 		)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
 
-	t.Run("credentials without endpoint is valid", func(t *testing.T) {
-		// Credentials set but no endpoint — valid (credentials are unused
-		// but not an error; the driver simply won't dial).
-		err := validateFulfillmentFlags("", "id", "/path", "https://issuer")
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
+	t.Run("credentials without endpoint returns error", func(t *testing.T) {
+		err := validateFulfillmentFlags("", "id", "/path", "https://issuer", false)
+		if err == nil {
+			t.Fatal("expected error when credentials are set without endpoint")
 		}
 	})
 }

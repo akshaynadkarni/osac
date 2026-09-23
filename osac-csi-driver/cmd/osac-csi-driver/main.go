@@ -43,6 +43,7 @@ func main() {
 		"Path to a file containing the OAuth2 client secret for fulfillment-service authentication")
 	fulfillmentIssuerURL := flag.String("fulfillment-issuer-url", "",
 		"Keycloak issuer URL for client_credentials token exchange (e.g. https://keycloak.example.com/realms/myrealm)")
+	allowStub := flag.Bool("allow-stub", false, "Allow the in-memory volume stub when fulfillment endpoint is empty")
 	grpcInsecure := flag.Bool("grpc-insecure", false, "Skip TLS server certificate verification")
 	vendorSocketsFlag := flag.String("vendor-sockets", "",
 		"Comma-separated backend=socketpath pairs for vendor node CSI sockets (e.g. ontap=/csi/trident/csi.sock)")
@@ -80,6 +81,7 @@ func main() {
 	if err := validateFulfillmentFlags(
 		*fulfillmentEndpoint,
 		*fulfillmentClientID, *fulfillmentClientSecretFile, *fulfillmentIssuerURL,
+		*allowStub,
 	); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
@@ -125,7 +127,7 @@ func main() {
 // set or all empty, and that --fulfillment-endpoint is not set without
 // credentials. Partial configuration is a user error.
 func validateFulfillmentFlags(
-	endpoint, clientID, clientSecretFile, issuerURL string,
+	endpoint, clientID, clientSecretFile, issuerURL string, allowStub bool,
 ) error {
 	set := 0
 	if clientID != "" {
@@ -143,11 +145,17 @@ func validateFulfillmentFlags(
 				"and --fulfillment-issuer-url must all be set or all be empty",
 		)
 	}
+	if endpoint == "" && set != 0 {
+		return fmt.Errorf("fulfillment credentials require --fulfillment-endpoint")
+	}
 	if endpoint != "" && set == 0 {
 		return fmt.Errorf(
 			"--fulfillment-endpoint requires --fulfillment-client-id, " +
 				"--fulfillment-client-secret-file, and --fulfillment-issuer-url",
 		)
+	}
+	if endpoint == "" && !allowStub {
+		return fmt.Errorf("--fulfillment-endpoint is required unless --allow-stub is set")
 	}
 	return nil
 }

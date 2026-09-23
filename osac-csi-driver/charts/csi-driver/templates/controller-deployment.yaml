@@ -64,6 +64,9 @@ spec:
             - "--grpc-insecure"
             {{- end }}
             {{- end }}
+            {{- if $fulfillment.allowStub }}
+            - "--allow-stub"
+            {{- end }}
             {{- if .Values.controller.vendorSockets }}
             - "--vendor-sockets={{ .Values.controller.vendorSockets }}"
             {{- end }}

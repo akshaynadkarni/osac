@@ -389,10 +389,9 @@ helm-deps: ## Build Helm chart dependencies
 	helm dependency build $(OSAC_CHART)
 
 .PHONY: helm-lint
-helm-lint: ## Lint all charts
+helm-lint: helm-deps ## Lint all charts
 	helm lint $(DEPS_CHART)
 	helm lint $(INFRA_CHART)
-	helm dependency build $(OSAC_CHART)
 	helm lint $(OSAC_CHART)
 
 .PHONY: helm-template

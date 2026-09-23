@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -128,12 +127,8 @@ func TestTokenHTTPClientRejectsCredentialRedirects(t *testing.T) {
 	for _, status := range []int{http.StatusTemporaryRedirect, http.StatusPermanentRedirect} {
 		t.Run(http.StatusText(status), func(t *testing.T) {
 			var targetRequests int
-			var targetAuth string
-			var targetBody []byte
 			target := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				targetRequests++
-				targetAuth = r.Header.Get("Authorization")
-				targetBody, _ = io.ReadAll(r.Body)
 			}))
 			defer target.Close()
 
@@ -165,9 +160,6 @@ func TestTokenHTTPClientRejectsCredentialRedirects(t *testing.T) {
 			}
 			if targetRequests != 0 {
 				t.Fatalf("redirect target received %d requests", targetRequests)
-			}
-			if targetAuth != "" || len(targetBody) != 0 {
-				t.Fatalf("redirect target received credentials")
 			}
 		})
 	}

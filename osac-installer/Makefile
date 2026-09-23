@@ -407,9 +407,10 @@ csi-render-test: helm-deps ## Verify CSI namespace and ConfigMap rendering modes
 		caas_render="$$(mktemp)"; \
 		csi_render="$$(mktemp)"; \
 		full_render="$$(mktemp)"; \
+		custom_render="$$(mktemp)"; \
 		infra_render="$$(mktemp)"; \
 		infra_enabled_render="$$(mktemp)"; \
-		trap 'rm -f "$$caas_render" "$$csi_render" "$$full_render" "$$infra_render" "$$infra_enabled_render"' EXIT; \
+		trap 'rm -f "$$caas_render" "$$csi_render" "$$full_render" "$$custom_render" "$$infra_render" "$$infra_enabled_render"' EXIT; \
 		helm template osac $(OSAC_CHART) \
 			--values values/caas-ci/instance.yaml \
 			--set service.externalHostname=fulfillment-api.example.com \
@@ -428,6 +429,14 @@ csi-render-test: helm-deps ## Verify CSI namespace and ConfigMap rendering modes
 		helm template osac $(OSAC_CHART) \
 			--values charts/osac/ci/full-values.yaml > "$$full_render"; \
 		test "$$(rg -c '^  OSAC_FULFILLMENT_ENDPOINT:' "$$full_render")" -eq 2; \
+		helm template osac $(OSAC_CHART) \
+			--values charts/osac/ci/full-values.yaml \
+			--set csiDriver.controller.fulfillment.configMap.endpointKey=CUSTOM_FULFILLMENT_ENDPOINT \
+			--set csiDriver.controller.fulfillment.configMap.issuerUrlKey=CUSTOM_FULFILLMENT_ISSUER_URL > "$$custom_render"; \
+		rg -q '^  CUSTOM_FULFILLMENT_ENDPOINT:' "$$custom_render"; \
+		rg -q '^  CUSTOM_FULFILLMENT_ISSUER_URL:' "$$custom_render"; \
+		rg -q 'key: CUSTOM_FULFILLMENT_ENDPOINT' "$$custom_render"; \
+		rg -q 'key: CUSTOM_FULFILLMENT_ISSUER_URL' "$$custom_render"; \
 		helm template osac-infra $(INFRA_CHART) \
 			--values values/caas-ci/infra.yaml > "$$infra_render"; \
 		! rg -q 'name: osac-infra-create-csi-creds' "$$infra_render"; \

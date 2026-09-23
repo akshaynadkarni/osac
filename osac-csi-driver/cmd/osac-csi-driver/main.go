@@ -221,6 +221,15 @@ func newTokenHTTPClient(insecureSkipVerify bool) *http.Client {
 	return &http.Client{
 		Transport: transport,
 		Timeout:   tokenHTTPTimeout,
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			if len(via) == 0 {
+				return nil
+			}
+			if req.URL.Scheme != "https" || req.URL.Host != via[0].URL.Host {
+				return fmt.Errorf("refusing token redirect to %s", req.URL)
+			}
+			return nil
+		},
 	}
 }
 

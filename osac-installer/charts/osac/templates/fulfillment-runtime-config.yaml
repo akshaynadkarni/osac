@@ -12,6 +12,8 @@ remain in the separate credential Secret.
 {{- $issuer := tpl (required "service.auth.issuerUrl is required when csiDriver.enabled is true" .Values.service.auth.issuerUrl) . }}
 {{- $csiNamespace := .Values.csiDriver.namespace | default .Release.Namespace }}
 {{- $csiConfigMapName := required "csiDriver.controller.fulfillment.configMap.name is required when csiDriver.enabled is true" .Values.csiDriver.controller.fulfillment.configMap.name }}
+{{- $csiEndpointKey := required "csiDriver.controller.fulfillment.configMap.endpointKey is required when csiDriver.enabled is true" .Values.csiDriver.controller.fulfillment.configMap.endpointKey }}
+{{- $csiIssuerKey := required "csiDriver.controller.fulfillment.configMap.issuerUrlKey is required when csiDriver.enabled is true" .Values.csiDriver.controller.fulfillment.configMap.issuerUrlKey }}
 {{- $operatorConfigMapName := "" }}
 {{- if .Values.operator.enabled }}
 {{- $operatorConfigMapName = required "operator.fulfillment.configMap.name is required when operator.enabled and csiDriver.enabled are true" .Values.operator.fulfillment.configMap.name }}
@@ -38,7 +40,7 @@ metadata:
   namespace: {{ $csiNamespace }}
 immutable: true
 data:
-  OSAC_FULFILLMENT_ENDPOINT: {{ $endpoint | quote }}
-  OSAC_FULFILLMENT_ISSUER_URL: {{ $issuer | quote }}
+  {{ $csiEndpointKey }}: {{ $endpoint | quote }}
+  {{ $csiIssuerKey }}: {{ $issuer | quote }}
 {{- end }}
 {{- end }}

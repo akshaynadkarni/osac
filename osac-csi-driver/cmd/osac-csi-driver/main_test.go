@@ -2,8 +2,12 @@ package main
 
 import (
 	"context"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -117,6 +121,55 @@ func TestNewTokenHTTPClient(t *testing.T) {
 	}
 	if got := newTokenHTTPClient(true).Timeout; got != tokenHTTPTimeout {
 		t.Fatalf("insecure token HTTP timeout = %s, want %s", got, tokenHTTPTimeout)
+	}
+}
+
+func TestTokenHTTPClientRejectsCredentialRedirects(t *testing.T) {
+	for _, status := range []int{http.StatusTemporaryRedirect, http.StatusPermanentRedirect} {
+		t.Run(http.StatusText(status), func(t *testing.T) {
+			var targetRequests int
+			var targetAuth string
+			var targetBody []byte
+			target := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				targetRequests++
+				targetAuth = r.Header.Get("Authorization")
+				targetBody, _ = io.ReadAll(r.Body)
+			}))
+			defer target.Close()
+
+			source := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Location", target.URL)
+				w.WriteHeader(status)
+			}))
+			defer source.Close()
+
+			req, err := http.NewRequest(
+				http.MethodPost,
+				source.URL,
+				strings.NewReader("client_id=client&client_secret=secret"),
+			)
+			if err != nil {
+				t.Fatalf("creating request: %v", err)
+			}
+			req.Header.Set("Authorization", "Basic credentials")
+
+			resp, err := newTokenHTTPClient(true).Do(req)
+			if err == nil {
+				if resp != nil {
+					resp.Body.Close()
+				}
+				t.Fatalf("expected redirect to be rejected")
+			}
+			if resp != nil {
+				resp.Body.Close()
+			}
+			if targetRequests != 0 {
+				t.Fatalf("redirect target received %d requests", targetRequests)
+			}
+			if targetAuth != "" || len(targetBody) != 0 {
+				t.Fatalf("redirect target received credentials")
+			}
+		})
 	}
 }
 

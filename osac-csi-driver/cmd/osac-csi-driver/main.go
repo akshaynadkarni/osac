@@ -75,8 +75,8 @@ func main() {
 	klog.Infof("Starting OSAC CSI driver %s version %s (commit %s)", *driverName, version, gitCommit)
 	klog.Infof("CSI endpoint: %s", *csiEndpoint)
 	klog.Infof("Node ID: %s", *nodeID)
-	klog.Infof("Vendor sockets: %v", vendorSockets)
-	klog.Infof("Vendor controllers: %v", vendorControllers)
+	klog.Infof("Vendor sockets configured for %d backends", len(vendorSockets))
+	klog.Infof("Vendor controllers configured for %d backends", len(vendorControllers))
 
 	if err := validateFulfillmentFlags(
 		*fulfillmentEndpoint,
@@ -103,7 +103,7 @@ func main() {
 				klog.Warningf("error closing fulfillment-service connection: %v", cerr)
 			}
 		}()
-		klog.Infof("Fulfillment endpoint: %s (connected)", *fulfillmentEndpoint)
+		klog.Info("Connected to fulfillment service")
 		volumeClient = fulfillment.NewVolumeClient(conn)
 	} else {
 		klog.Infof("No fulfillment endpoint configured, using in-memory volume stub")

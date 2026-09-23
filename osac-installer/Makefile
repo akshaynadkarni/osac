@@ -392,13 +392,13 @@ helm-deps: ## Build Helm chart dependencies
 helm-lint: helm-deps ## Lint all charts
 	helm lint $(DEPS_CHART)
 	helm lint $(INFRA_CHART)
-	helm lint $(OSAC_CHART)
+	helm lint $(OSAC_CHART) --values $(OSAC_CHART)/ci/default-values.yaml
 
 .PHONY: helm-template
 helm-template: ## Dry-run render all templates
 	helm template osac-deps $(DEPS_CHART)
 	helm template osac-infra $(INFRA_CHART)
-	helm template osac $(OSAC_CHART)
+	helm template osac $(OSAC_CHART) --values $(OSAC_CHART)/ci/default-values.yaml
 
 .PHONY: csi-render-test
 csi-render-test: helm-deps ## Verify CSI namespace and ConfigMap rendering modes

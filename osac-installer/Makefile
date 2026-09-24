@@ -425,6 +425,7 @@ csi-render-test: helm-deps ## Verify CSI namespace and ConfigMap rendering modes
 		}; \
 		helm template osac $(OSAC_CHART) \
 			--values values/caas-ci/instance.yaml \
+			--set operator.networkManagers.enabled=true \
 			--set service.externalHostname=fulfillment-api.example.com \
 			--set service.internalHostname=fulfillment-internal-api.example.com \
 			--set global.clusterDomain=example.com > "$$caas_render"; \
@@ -432,6 +433,7 @@ csi-render-test: helm-deps ## Verify CSI namespace and ConfigMap rendering modes
 		helm template osac $(OSAC_CHART) \
 			--values charts/osac/ci/default-values.yaml \
 			--set operator.enabled=false \
+			--set operator.networkManagers.enabled=true \
 			--set csiDriver.enabled=true \
 			--set csiDriver.controller.fulfillment.credentials.secretName=osac-csi-driver-credentials \
 			--set csiDriver.controller.fulfillment.allowStub=false > "$$csi_render"; \
@@ -439,10 +441,12 @@ csi-render-test: helm-deps ## Verify CSI namespace and ConfigMap rendering modes
 		rg -q 'namespace: osac-csi' "$$csi_render"; \
 		rg -q '^immutable: true$$' "$$csi_render"; \
 		helm template osac $(OSAC_CHART) \
-			--values charts/osac/ci/full-values.yaml > "$$full_render"; \
+			--values charts/osac/ci/full-values.yaml \
+			--set operator.networkManagers.enabled=true > "$$full_render"; \
 		test "$$(rg -c '^  OSAC_FULFILLMENT_ENDPOINT:' "$$full_render")" -eq 2; \
 		helm template osac $(OSAC_CHART) \
 			--values charts/osac/ci/full-values.yaml \
+			--set operator.networkManagers.enabled=true \
 			--set csiDriver.controller.fulfillment.configMap.endpointKey=CUSTOM_FULFILLMENT_ENDPOINT \
 			--set csiDriver.controller.fulfillment.configMap.issuerUrlKey=CUSTOM_FULFILLMENT_ISSUER_URL > "$$custom_render"; \
 		rg -q '^  CUSTOM_FULFILLMENT_ENDPOINT:' "$$custom_render"; \
@@ -459,6 +463,7 @@ csi-render-test: helm-deps ## Verify CSI namespace and ConfigMap rendering modes
 		assert_helm_failure "at '/csiDriver/namespace': value must be 'osac-csi'" \
 			helm template osac $(OSAC_CHART) \
 			--values charts/osac/ci/full-values.yaml \
+			--set operator.networkManagers.enabled=true \
 			--set csiDriver.namespace=not-osac-csi; \
 		assert_helm_failure 'csiNamespace must be osac-csi when csiDriver.enabled is true' \
 			helm template osac-infra $(INFRA_CHART) \
@@ -468,6 +473,7 @@ csi-render-test: helm-deps ## Verify CSI namespace and ConfigMap rendering modes
 		assert_helm_failure 'operator and CSI ConfigMaps must use different names when they share a namespace' \
 			helm template osac $(OSAC_CHART) \
 			--values charts/osac/ci/full-values.yaml \
+			--set operator.networkManagers.enabled=true \
 			--namespace osac-csi \
 			--set csiDriver.controller.fulfillment.configMap.name=osac-fulfillment-config; \
 		assert_helm_failure "value must be one of '', 'osac-csi'" \

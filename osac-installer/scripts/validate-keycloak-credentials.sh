@@ -114,7 +114,7 @@ EOF
 # Stub `oc` so the hook script's client-secret bootstrap path is exercised
 # without a real cluster: existence check reports "not found" once (forcing
 # the generate branch), then jsonpath lookups return fixed base64 values for
-# all three client secrets.
+# all four client secrets.
 mkdir -p "${TMP_DIR}/bin"
 cat >"${TMP_DIR}/bin/oc" <<'EOF'
 #!/usr/bin/env bash
@@ -123,6 +123,7 @@ case "${args}" in
   *"-o jsonpath="*osac-controller*) printf '%s' "$(printf 'controller-secret' | base64)" ;;
   *"-o jsonpath="*osac-admin*)      printf '%s' "$(printf 'admin-secret' | base64)" ;;
   *"-o jsonpath="*osac-csi-driver*) printf '%s' "$(printf 'csi-driver-secret' | base64)" ;;
+  *"-o jsonpath="*osac-ui-backend*) printf '%s' "$(printf 'ui-backend-secret' | base64)" ;;
   *"create secret"*)                exit 0 ;;
   *"get secret"*)                   exit 1 ;;  # existence check: force the "generate" branch
   *)                                exit 0 ;;

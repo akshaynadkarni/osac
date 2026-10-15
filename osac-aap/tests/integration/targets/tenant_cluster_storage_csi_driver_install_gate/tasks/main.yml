@@ -697,6 +697,20 @@
         name: csi.trident.netapp.io
       register: _native_csi_trident_driver
 
+    - name: Read Trident operand namespace
+      kubernetes.core.k8s_info:
+        api_version: v1
+        kind: Namespace
+        name: trident
+      register: _native_csi_trident_namespace
+
+    - name: Assert the driver ensure action created the Trident operand namespace
+      ansible.builtin.assert:
+        that:
+          - _native_csi_trident_namespace.resources | length == 1
+        fail_msg: "The Trident operand namespace was not created before installation"
+        success_msg: "The Trident operand namespace exists"
+
     - name: Assert Trident registered its CSI driver
       ansible.builtin.assert:
         that:

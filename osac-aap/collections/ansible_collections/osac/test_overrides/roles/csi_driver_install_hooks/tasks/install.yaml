@@ -31,16 +31,6 @@
     create: true
     mode: "0600"
 
-- name: Create Trident namespace fixture
-  when:
-    - native_csi_driver_install_tiers is defined
-    - "'csi.trident.netapp.io' in native_csi_driver_names"
-  kubernetes.core.k8s:
-    state: present
-    api_version: v1
-    kind: Namespace
-    name: trident
-
 - name: Create Trident CSI registration fixture
   when: native_csi_driver_install_tiers is defined
   kubernetes.core.k8s:

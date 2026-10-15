@@ -250,6 +250,15 @@
       kubeconfig: "{{ storage_provider_target_kubeconfig | default(omit) }}"
       validate_certs: "{{ false if (storage_provider_target_kubeconfig_insecure | default(false) | bool) else omit }}"
   block:
+    - name: Ensure the Trident operand namespace exists
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: v1
+          kind: Namespace
+          metadata:
+            name: "{{ storage_provider_csi_driver_matrix.netapp.installer.trident_namespace }}"
+
     - name: Check for the native Trident CSI driver
       kubernetes.core.k8s_info:
         api_version: storage.k8s.io/v1

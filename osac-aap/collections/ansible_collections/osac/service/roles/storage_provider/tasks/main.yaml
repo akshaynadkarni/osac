@@ -2,9 +2,9 @@
 # Input validation fires here, before any include_tasks dispatch.
 # This is the single point of validation — provider roles must never be called
 # directly via include_role from playbooks, bypassing this dispatcher.
-# Provider and protocol validation is NOT hardcoded here — providers are discovered
-# dynamically (role must exist as osac.templates.{provider}_storage), and protocols
-# are validated by each provider role via its meta/osac.yaml capabilities.
+# Provider storage operations are discovered dynamically (the role must exist as
+# osac.templates.{provider}_storage), and protocols are validated by each provider
+# role via meta/osac.yaml. Native CSI driver setup uses explicit provider mappings.
 
 - name: Validate storage_provider_tiers is a non-empty list
   ansible.builtin.fail:
@@ -149,8 +149,8 @@
   ansible.builtin.fail:
     msg: >-
       Invalid storage_provider_action '{{ storage_provider_action }}'. Must be one of:
-      setup, ensure_storage_class, teardown_cluster_storage, teardown_backend.
-  when: storage_provider_action not in ['setup', 'ensure_storage_class', 'teardown_cluster_storage', 'teardown_backend']
+      setup, ensure_csi_driver, ensure_storage_class, teardown_cluster_storage, teardown_backend.
+  when: storage_provider_action not in ['setup', 'ensure_csi_driver', 'ensure_storage_class', 'teardown_cluster_storage', 'teardown_backend']
 
 - name: Extract unique providers from tier list
   ansible.builtin.set_fact:
@@ -162,3 +162,350 @@
 
 - name: Dispatch to storage action task file
   ansible.builtin.include_tasks: "{{ storage_provider_action }}.yaml"
+  when: storage_provider_action != 'ensure_csi_driver'
+
+- name: Select providers for native CSI driver setup
+  when: storage_provider_action == 'ensure_csi_driver'
+  ansible.builtin.set_fact:
+    _native_csi_driver_unknown_providers: >-
+      {{ _unique_providers | difference(storage_provider_csi_driver_matrix.keys() | list) }}
+    _native_csi_driver_netapp_protocols: >-
+      {{ storage_provider_csi_driver_matrix.netapp.protocols.keys() | list }}
+    _native_csi_driver_vast_protocols_supported: >-
+      {{ storage_provider_csi_driver_matrix.vast.protocols.keys() | list }}
+    _native_csi_driver_netapp_tiers: >-
+      {{ _storage_provider_tiers | selectattr('provider', 'equalto', 'netapp') | list }}
+    _native_csi_driver_vast_tiers: >-
+      {{ _storage_provider_tiers | selectattr('provider', 'equalto', 'vast') | list }}
+    _native_csi_driver_vast_protocols: >-
+      {{ _storage_provider_tiers
+         | selectattr('provider', 'equalto', 'vast')
+         | map(attribute='protocol') | unique | sort | list }}
+
+- name: Reject providers without a native CSI setup handler
+  when:
+    - storage_provider_action == 'ensure_csi_driver'
+    - _native_csi_driver_unknown_providers | length > 0
+  ansible.builtin.fail:
+    msg: >-
+      Unsupported provider(s) for native CSI driver setup:
+      {{ _native_csi_driver_unknown_providers | join(', ') }}.
+
+- name: Reject unsupported NetApp protocols before changing the target cluster
+  when:
+    - storage_provider_action == 'ensure_csi_driver'
+    - _native_csi_driver_netapp_tiers
+      | rejectattr('protocol', 'in', _native_csi_driver_netapp_protocols)
+      | list | length > 0
+  ansible.builtin.fail:
+    msg: >-
+      NetApp native CSI setup supports protocol(s)
+      {{ _native_csi_driver_netapp_protocols | join(', ') }}. Unsupported tier(s):
+      {{ _native_csi_driver_netapp_tiers
+         | rejectattr('protocol', 'in', _native_csi_driver_netapp_protocols)
+         | map(attribute='name') | join(', ') }}.
+
+- name: Reject unsupported VAST protocols before changing the target cluster
+  when:
+    - storage_provider_action == 'ensure_csi_driver'
+    - _native_csi_driver_vast_tiers
+      | rejectattr('protocol', 'in', _native_csi_driver_vast_protocols_supported)
+      | list | length > 0
+  ansible.builtin.fail:
+    msg: >-
+      VAST native CSI setup does not support protocol(s):
+      {{ _native_csi_driver_vast_tiers
+         | rejectattr('protocol', 'in', _native_csi_driver_vast_protocols_supported)
+         | map(attribute='protocol') | unique | join(', ') }}.
+
+- name: Reject unsupported NetApp CSI installer methods
+  when:
+    - storage_provider_action == 'ensure_csi_driver'
+    - _native_csi_driver_netapp_tiers | length > 0
+    - storage_provider_csi_driver_matrix.netapp.installer.method != 'olm'
+  ansible.builtin.fail:
+    msg: >-
+      NetApp CSI installer method
+      '{{ storage_provider_csi_driver_matrix.netapp.installer.method }}' is not supported.
+
+- name: Reject unsupported VAST CSI installer methods
+  when:
+    - storage_provider_action == 'ensure_csi_driver'
+    - _native_csi_driver_vast_tiers | length > 0
+    - storage_provider_csi_driver_matrix.vast.installer.method != 'olm'
+  ansible.builtin.fail:
+    msg: >-
+      VAST CSI installer method
+      '{{ storage_provider_csi_driver_matrix.vast.installer.method }}' is not supported.
+
+- name: Ensure native Trident CSI driver on the selected VMaaS cluster
+  when:
+    - storage_provider_action == 'ensure_csi_driver'
+    - _native_csi_driver_netapp_tiers | length > 0
+  module_defaults:
+    kubernetes.core.k8s:
+      kubeconfig: "{{ storage_provider_target_kubeconfig | default(omit) }}"
+      validate_certs: "{{ false if (storage_provider_target_kubeconfig_insecure | default(false) | bool) else omit }}"
+    kubernetes.core.k8s_info:
+      kubeconfig: "{{ storage_provider_target_kubeconfig | default(omit) }}"
+      validate_certs: "{{ false if (storage_provider_target_kubeconfig_insecure | default(false) | bool) else omit }}"
+  block:
+    - name: Check for the native Trident CSI driver
+      kubernetes.core.k8s_info:
+        api_version: storage.k8s.io/v1
+        kind: CSIDriver
+        name: "{{ storage_provider_csi_driver_matrix.netapp.protocols.block }}"
+      register: _netapp_trident_driver_check
+
+    - name: Install Trident with the pinned OLM release when the driver is absent
+      when: _netapp_trident_driver_check.resources | length == 0
+      block:
+        - name: Invoke the Trident OLM installer override when configured
+          when: storage_provider_netapp_trident_install_override is defined
+          ansible.builtin.include_role:
+            name: "{{ storage_provider_netapp_trident_install_override.name }}"
+            tasks_from: "{{ storage_provider_netapp_trident_install_override.tasks_from }}"
+          vars:
+            native_csi_driver_install_tiers: "{{ _native_csi_driver_netapp_tiers }}"
+            native_csi_driver_names:
+              - "{{ storage_provider_csi_driver_matrix.netapp.protocols.block }}"
+            native_csi_driver_version_selector: "{{ storage_provider_csi_driver_matrix.netapp.installer.starting_csv }}"
+            native_csi_driver_version: "{{ storage_provider_csi_driver_matrix.netapp.installer.trident_version }}"
+
+        - name: Check the Red Hat certified operator catalog on the target cluster
+          when: storage_provider_netapp_trident_install_override is not defined
+          kubernetes.core.k8s_info:
+            api_version: operators.coreos.com/v1alpha1
+            kind: CatalogSource
+            name: "{{ storage_provider_csi_driver_matrix.netapp.installer.catalog_source }}"
+            namespace: "{{ storage_provider_csi_driver_matrix.netapp.installer.catalog_namespace }}"
+          register: _netapp_trident_catalog
+
+        - name: Require the certified operator catalog before installing Trident
+          when:
+            - storage_provider_netapp_trident_install_override is not defined
+            - _netapp_trident_catalog.resources | length == 0
+          ansible.builtin.fail:
+            msg: >-
+              CatalogSource '{{ storage_provider_csi_driver_matrix.netapp.installer.catalog_source }}'
+              was not found in namespace
+              '{{ storage_provider_csi_driver_matrix.netapp.installer.catalog_namespace }}'
+              on the VMaaS target cluster.
+
+        - name: Ensure the Trident Operator Subscription exists
+          when: storage_provider_netapp_trident_install_override is not defined
+          kubernetes.core.k8s:
+            state: present
+            definition:
+              apiVersion: operators.coreos.com/v1alpha1
+              kind: Subscription
+              metadata:
+                name: "{{ storage_provider_csi_driver_matrix.netapp.installer.package }}"
+                namespace: "{{ storage_provider_csi_driver_matrix.netapp.installer.namespace }}"
+              spec:
+                channel: "{{ storage_provider_csi_driver_matrix.netapp.installer.channel }}"
+                name: "{{ storage_provider_csi_driver_matrix.netapp.installer.package }}"
+                source: "{{ storage_provider_csi_driver_matrix.netapp.installer.catalog_source }}"
+                sourceNamespace: "{{ storage_provider_csi_driver_matrix.netapp.installer.catalog_namespace }}"
+                startingCSV: "{{ storage_provider_csi_driver_matrix.netapp.installer.starting_csv }}"
+                installPlanApproval: "{{ storage_provider_csi_driver_matrix.netapp.installer.install_plan_approval }}"
+
+        - name: Wait for OLM to resolve the pinned Trident CSV
+          when: storage_provider_netapp_trident_install_override is not defined
+          kubernetes.core.k8s_info:
+            api_version: operators.coreos.com/v1alpha1
+            kind: Subscription
+            name: "{{ storage_provider_csi_driver_matrix.netapp.installer.package }}"
+            namespace: "{{ storage_provider_csi_driver_matrix.netapp.installer.namespace }}"
+          register: _netapp_trident_subscription
+          retries: 30
+          delay: 10
+          until: >-
+            _netapp_trident_subscription.resources | length > 0
+            and (
+              (_netapp_trident_subscription.resources[0].status.installedCSV | default(''))
+              == storage_provider_csi_driver_matrix.netapp.installer.starting_csv
+              or _netapp_trident_subscription.resources[0].status.installPlanRef.name is defined
+            )
+
+        - name: Determine whether the pinned Trident CSV is already installed
+          when: storage_provider_netapp_trident_install_override is not defined
+          ansible.builtin.set_fact:
+            _netapp_trident_csv_installed: >-
+              {{ _netapp_trident_subscription.resources[0].status.installedCSV | default('')
+                 == storage_provider_csi_driver_matrix.netapp.installer.starting_csv }}
+
+        - name: Wait for the Trident Operator InstallPlan
+          when:
+            - storage_provider_netapp_trident_install_override is not defined
+            - not (_netapp_trident_csv_installed | bool)
+          kubernetes.core.k8s_info:
+            api_version: operators.coreos.com/v1alpha1
+            kind: InstallPlan
+            name: "{{ _netapp_trident_subscription.resources[0].status.installPlanRef.name }}"
+            namespace: "{{ storage_provider_csi_driver_matrix.netapp.installer.namespace }}"
+          register: _netapp_trident_install_plan
+          retries: 30
+          delay: 10
+          until: _netapp_trident_install_plan.resources | length > 0
+
+        - name: Fail if the Trident InstallPlan does not contain the pinned CSV
+          when:
+            - storage_provider_netapp_trident_install_override is not defined
+            - not (_netapp_trident_csv_installed | bool)
+            - storage_provider_csi_driver_matrix.netapp.installer.starting_csv
+              not in _netapp_trident_install_plan.resources[0].spec.clusterServiceVersionNames
+          ansible.builtin.fail:
+            msg: >-
+              The Trident InstallPlan does not contain the pinned CSV
+              '{{ storage_provider_csi_driver_matrix.netapp.installer.starting_csv }}'.
+
+        - name: Approve the Trident InstallPlan for the pinned CSV
+          when:
+            - storage_provider_netapp_trident_install_override is not defined
+            - not (_netapp_trident_csv_installed | bool)
+            - not (_netapp_trident_install_plan.resources[0].spec.approved | default(false) | bool)
+          kubernetes.core.k8s:
+            state: patched
+            definition:
+              apiVersion: operators.coreos.com/v1alpha1
+              kind: InstallPlan
+              metadata:
+                name: "{{ _netapp_trident_install_plan.resources[0].metadata.name }}"
+                namespace: "{{ storage_provider_csi_driver_matrix.netapp.installer.namespace }}"
+              spec:
+                approved: true
+
+        - name: Wait for the pinned Trident Operator CSV to succeed
+          when: storage_provider_netapp_trident_install_override is not defined
+          kubernetes.core.k8s_info:
+            api_version: operators.coreos.com/v1alpha1
+            kind: ClusterServiceVersion
+            name: "{{ storage_provider_csi_driver_matrix.netapp.installer.starting_csv }}"
+            namespace: "{{ storage_provider_csi_driver_matrix.netapp.installer.namespace }}"
+          register: _netapp_trident_csv
+          retries: 30
+          delay: 10
+          until: >-
+            _netapp_trident_csv.resources | length > 0
+            and _netapp_trident_csv.resources[0].status.phase == 'Succeeded'
+
+        - name: Wait for the TridentOrchestrator CRD
+          when: storage_provider_netapp_trident_install_override is not defined
+          kubernetes.core.k8s_info:
+            api_version: apiextensions.k8s.io/v1
+            kind: CustomResourceDefinition
+            name: tridentorchestrators.trident.netapp.io
+          register: _netapp_trident_orchestrator_crd
+          retries: 30
+          delay: 10
+          until: _netapp_trident_orchestrator_crd.resources | length > 0
+
+        - name: Ensure the TridentOrchestrator installs the operator bundle's Trident operand
+          when: storage_provider_netapp_trident_install_override is not defined
+          kubernetes.core.k8s:
+            state: present
+            definition:
+              apiVersion: trident.netapp.io/v1
+              kind: TridentOrchestrator
+              metadata:
+                name: trident
+                namespace: "{{ storage_provider_csi_driver_matrix.netapp.installer.namespace }}"
+              spec:
+                debug: false
+                imagePullPolicy: IfNotPresent
+                nodePrep: []
+                namespace: "{{ storage_provider_csi_driver_matrix.netapp.installer.trident_namespace }}"
+                silenceAutosupport: false
+                tridentImage: "{{ storage_provider_csi_driver_matrix.netapp.installer.trident_image }}"
+
+        - name: Wait for the TridentOrchestrator to report Installed
+          when: storage_provider_netapp_trident_install_override is not defined
+          kubernetes.core.k8s_info:
+            api_version: trident.netapp.io/v1
+            kind: TridentOrchestrator
+            name: trident
+            namespace: "{{ storage_provider_csi_driver_matrix.netapp.installer.namespace }}"
+          register: _netapp_trident_orchestrator
+          retries: 30
+          delay: 10
+          until: >-
+            _netapp_trident_orchestrator.resources | length > 0
+            and _netapp_trident_orchestrator.resources[0].status.status == 'Installed'
+
+    - name: Wait for native Trident CSI registration
+      kubernetes.core.k8s_info:
+        api_version: storage.k8s.io/v1
+        kind: CSIDriver
+        name: "{{ storage_provider_csi_driver_matrix.netapp.protocols.block }}"
+      register: _netapp_trident_driver_ready
+      retries: 30
+      delay: 10
+      until: _netapp_trident_driver_ready.resources | length > 0
+
+    - name: Wait for the TridentBackendConfig API
+      kubernetes.core.k8s_info:
+        api_version: apiextensions.k8s.io/v1
+        kind: CustomResourceDefinition
+        name: tridentbackendconfigs.trident.netapp.io
+      register: _netapp_trident_backend_config_api
+      retries: 30
+      delay: 10
+      until: _netapp_trident_backend_config_api.resources | length > 0
+
+    - name: Wait for the Trident controller Deployment
+      kubernetes.core.k8s_info:
+        api_version: apps/v1
+        kind: Deployment
+        name: trident-controller
+        namespace: "{{ storage_provider_csi_driver_matrix.netapp.installer.trident_namespace }}"
+      register: _netapp_trident_controller
+      retries: 30
+      delay: 10
+      until: >-
+        _netapp_trident_controller.resources | length > 0
+        and (_netapp_trident_controller.resources[0].status.availableReplicas | default(0) | int) > 0
+
+    - name: Wait for the Trident node DaemonSet on all eligible nodes
+      kubernetes.core.k8s_info:
+        api_version: apps/v1
+        kind: DaemonSet
+        name: trident-node-linux
+        namespace: "{{ storage_provider_csi_driver_matrix.netapp.installer.trident_namespace }}"
+      register: _netapp_trident_node
+      retries: 30
+      delay: 10
+      until: >-
+        _netapp_trident_node.resources | length > 0
+        and (_netapp_trident_node.resources[0].status.desiredNumberScheduled | default(0) | int) > 0
+        and (_netapp_trident_node.resources[0].status.numberReady | default(0) | int)
+            >= (_netapp_trident_node.resources[0].status.desiredNumberScheduled | default(0) | int)
+
+- name: Ensure VAST CSI drivers required by the resolved tiers on the selected cluster
+  when:
+    - storage_provider_action == 'ensure_csi_driver'
+    - _native_csi_driver_vast_protocols | length > 0
+  module_defaults:
+    kubernetes.core.k8s:
+      kubeconfig: "{{ storage_provider_target_kubeconfig | default(omit) }}"
+      validate_certs: "{{ false if (storage_provider_target_kubeconfig_insecure | default(false) | bool) else omit }}"
+    kubernetes.core.k8s_info:
+      kubeconfig: "{{ storage_provider_target_kubeconfig | default(omit) }}"
+      validate_certs: "{{ false if (storage_provider_target_kubeconfig_insecure | default(false) | bool) else omit }}"
+  block:
+    - name: Include the VAST driver ensure tasks
+      ansible.builtin.include_role:
+        name: osac.templates.vast_storage
+        tasks_from: ensure_csi_operator.yaml
+        apply:
+          tags: [provider_csi_driver_install]
+      vars:
+        _provider_tiers: "{{ _native_csi_driver_vast_tiers }}"
+        _vast_required_protocols: "{{ _native_csi_driver_vast_protocols }}"
+        vast_storage_csi_provisioner_map: "{{ storage_provider_csi_driver_matrix.vast.protocols }}"
+        vast_storage_csi_operator_namespace: "{{ storage_provider_csi_driver_matrix.vast.installer.namespace }}"
+        vast_storage_csi_operator_channel: "{{ storage_provider_csi_driver_matrix.vast.installer.channel }}"
+        vast_storage_csi_operator_approval: "{{ storage_provider_csi_driver_matrix.vast.installer.install_plan_approval }}"
+        vast_storage_csi_operator_catalog_source: "{{ storage_provider_csi_driver_matrix.vast.installer.catalog_source }}"
+        vast_storage_csi_operator_catalog_namespace: "{{ storage_provider_csi_driver_matrix.vast.installer.catalog_namespace }}"
+        vast_storage_csi_operator_version_policy: "{{ storage_provider_csi_driver_matrix.vast.installer.version_policy }}"

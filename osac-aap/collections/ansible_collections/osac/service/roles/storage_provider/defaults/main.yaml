@@ -14,3 +14,40 @@ storage_provider_csi_backends_chart_ref: >-
 storage_provider_csi_backends_chart_version: ""
 storage_provider_csi_backends_release_name: "osac-csi-backends"
 storage_provider_csi_backends_namespace: "osac-csi-backends"
+
+# Trident Operator CSV 26.6.2 is in the certified-operators catalog for OCP 4.22.
+# Its bundle supplies the matching Trident 26.06.2 operand image.
+storage_provider_csi_driver_matrix:
+  netapp:
+    protocols:
+      block: "csi.trident.netapp.io"
+    installer:
+      method: olm
+      package: trident-operator
+      channel: stable
+      namespace: openshift-operators
+      starting_csv: trident-operator.v26.6.2
+      install_plan_approval: Manual
+      catalog_source: certified-operators
+      catalog_namespace: openshift-marketplace
+      trident_namespace: trident
+      trident_version: "26.06.2"
+      trident_image: "registry.connect.redhat.com/netapp/trident:26.06.2"
+  vast:
+    protocols:
+      nfs: "csi.vastdata.com"
+      block: "block.csi.vastdata.com"
+    installer:
+      method: olm
+      namespace: vast-csi-system
+      package: vast-csi-operator
+      channel: stable
+      install_plan_approval: Automatic
+      catalog_source: certified-operators
+      catalog_namespace: openshift-marketplace
+      version_policy: latest-in-stable-channel
+  lvms:
+    protocols:
+      block: "topolvm.io"
+    installer:
+      method: managed-by-lvms

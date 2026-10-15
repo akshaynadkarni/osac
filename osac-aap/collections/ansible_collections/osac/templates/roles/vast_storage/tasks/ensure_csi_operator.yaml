@@ -5,8 +5,8 @@
 #
 # Requires:
 #   _vast_required_protocols      — list of unique protocols from caller (e.g. ['nfs', 'block'])
-#   vast_storage_csi_provisioner_map — from defaults ({nfs: csi.vastdata.com, block: block.csi.vastdata.com})
-#   vast_storage_csi_operator_*   — from defaults (OLM config)
+#   vast_storage_csi_provisioner_map — provider/protocol map passed by storage_provider
+#   vast_storage_csi_operator_*   — VAST OLM configuration from the provider matrix
 
 - name: Build list of expected CSI provisioner names from required protocols
   ansible.builtin.set_fact:
@@ -38,8 +38,23 @@
   ansible.builtin.debug:
     msg: "All required VAST CSI drivers are already installed: {{ _vast_required_provisioners | join(', ') }}"
 
+- name: Invoke the VAST CSI installer override when configured
+  when:
+    - _vast_any_driver_missing
+    - vast_storage_csi_operator_install_override is defined
+  ansible.builtin.include_role:
+    name: "{{ vast_storage_csi_operator_install_override.name }}"
+    tasks_from: "{{ vast_storage_csi_operator_install_override.tasks_from }}"
+  vars:
+    native_csi_driver_install_tiers: "{{ _provider_tiers }}"
+    native_csi_driver_names: "{{ _vast_required_provisioners }}"
+    native_csi_driver_version_selector: "{{ vast_storage_csi_operator_version_policy }}"
+    native_csi_driver_version: "latest-in-stable-channel"
+
 - name: Install VAST CSI Operator via OLM (covers all protocols with single subscription)
-  when: _vast_any_driver_missing
+  when:
+    - _vast_any_driver_missing
+    - vast_storage_csi_operator_install_override is not defined
   block:
     - name: Check if OLM is available on cluster
       kubernetes.core.k8s_info:

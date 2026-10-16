@@ -280,6 +280,7 @@
               - "{{ storage_provider_csi_driver_matrix.netapp.protocols.block }}"
             native_csi_driver_version_selector: "{{ storage_provider_csi_driver_matrix.netapp.installer.starting_csv }}"
             native_csi_driver_version: "{{ storage_provider_csi_driver_matrix.netapp.installer.trident_version }}"
+            native_csi_driver_install_plan_approval: "{{ storage_provider_csi_driver_matrix.netapp.installer.install_plan_approval }}"
 
         - name: Check the Red Hat certified operator catalog on the target cluster
           when: storage_provider_netapp_trident_install_override is not defined
@@ -517,4 +518,4 @@
         vast_storage_csi_operator_approval: "{{ storage_provider_csi_driver_matrix.vast.installer.install_plan_approval }}"
         vast_storage_csi_operator_catalog_source: "{{ storage_provider_csi_driver_matrix.vast.installer.catalog_source }}"
         vast_storage_csi_operator_catalog_namespace: "{{ storage_provider_csi_driver_matrix.vast.installer.catalog_namespace }}"
-        vast_storage_csi_operator_version_policy: "{{ storage_provider_csi_driver_matrix.vast.installer.version_policy }}"
+        vast_storage_csi_operator_starting_csv: "{{ storage_provider_csi_driver_matrix.vast.installer.starting_csv }}"

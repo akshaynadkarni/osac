@@ -1,5 +1,5 @@
 ---
-# Provides test stubs for OSAC CSI and native Trident installer calls. Logs only
+# Provides test stubs for OSAC CSI and provider-native CSI installer calls. Logs only
 # provider and driver identifiers, never backend payloads or credentials.
 - name: Log OSAC CSI driver install step execution with non-sensitive identifiers
   when: csi_driver_install_tiers is defined
@@ -27,6 +27,7 @@
       drivers={{ native_csi_driver_names | to_json }} |
       version-selector={{ native_csi_driver_version_selector }} |
       driver-version={{ native_csi_driver_version }} |
+      install-plan-approval={{ native_csi_driver_install_plan_approval | default('unspecified') }} |
       providers={{ native_csi_driver_install_tiers | map(attribute='provider') | sort | list | to_json }}
     create: true
     mode: "0600"

@@ -56,7 +56,7 @@ See [suite boundaries and coverage gaps](../docs/INTEGRATION-TESTING.md#osac-aap
 | Ansible roles, workflow tasks, hooks, leases, finalizers, or Kubernetes resources | Component integration | `make test` or the focused target command |
 | Execution-environment definition or dependency inputs | Build/package validation plus applicable integration tests | `make execution-environment-build`, then `make test` |
 | AAP, OpenStack, KubeVirt/RHACM, or provider provisioning | Contract or real-provider integration | Use the qualifying [OSAC-4843](https://redhat.atlassian.net/browse/OSAC-4843) suite |
-| Storage-provider behavior | Component integration (focused) plus real-provider coverage when required | Tenant target-routing runs in `make test`; provider tests require `STORAGE_TESTS_ENABLED=true make test` (or the relevant storage target and provider suite) |
+| Storage-provider behavior | Component integration (focused) plus real OLM coverage | Tenant target-routing runs in `make test`; stubbed storage-provider wiring runs with `STORAGE_TESTS_ENABLED=true make test`; deployed NetApp/VAST OLM installation is covered by the full-install VMaaS E2E `tests/e2e/vmaas/regression/261016-1132-native_csi_driver_install_test.py` and does not exercise array provisioning |
 
 Storage integration requires `STORAGE_TESTS_ENABLED=true`; image builds are separate build/package validation.
 

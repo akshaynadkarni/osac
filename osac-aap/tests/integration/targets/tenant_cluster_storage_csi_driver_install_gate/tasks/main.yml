@@ -684,8 +684,9 @@
         that:
           - "'native_csi_driver_install' in _native_csi_install_log"
           - "'drivers=[\"csi.trident.netapp.io\"]' in _native_csi_install_log"
-          - "'operator-csv=trident-operator.v26.6.2' in _native_csi_install_log"
+          - "'version-selector=trident-operator.v26.6.2' in _native_csi_install_log"
           - "'driver-version=26.06.2' in _native_csi_install_log"
+          - "'install-plan-approval=Manual' in _native_csi_install_log"
           - "'providers=[\"netapp\"]' in _native_csi_install_log"
         fail_msg: "NetApp block tier did not invoke the native Trident installer with the configured version: {{ _native_csi_install_log }}"
         success_msg: "NetApp block tier selected native Trident and the pinned chart version"
@@ -961,7 +962,9 @@
       ansible.builtin.assert:
         that:
           - "'drivers=[\"block.csi.vastdata.com\", \"csi.vastdata.com\"]' in _vast_native_csi_install_log"
-          - "'version-selector=latest-in-stable-channel' in _vast_native_csi_install_log"
+          - "'version-selector=vast-csi-operator.v2.6.8' in _vast_native_csi_install_log"
+          - "'driver-version=vast-csi-operator.v2.6.8' in _vast_native_csi_install_log"
+          - "'install-plan-approval=Manual' in _vast_native_csi_install_log"
           - "'providers=[\"vast\", \"vast\"]' in _vast_native_csi_install_log"
         fail_msg: "VAST protocol tiers did not select their mapped drivers and catalog policy: {{ _vast_native_csi_install_log }}"
         success_msg: "VAST NFS and block tiers selected separate mapped drivers"

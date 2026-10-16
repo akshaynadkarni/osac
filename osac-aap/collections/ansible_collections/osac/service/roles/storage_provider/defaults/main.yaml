@@ -42,10 +42,10 @@ storage_provider_csi_driver_matrix:
       namespace: vast-csi-system
       package: vast-csi-operator
       channel: stable
-      install_plan_approval: Automatic
+      starting_csv: vast-csi-operator.v2.6.8
+      install_plan_approval: Manual
       catalog_source: certified-operators
       catalog_namespace: openshift-marketplace
-      version_policy: latest-in-stable-channel
   lvms:
     protocols:
       block: "topolvm.io"

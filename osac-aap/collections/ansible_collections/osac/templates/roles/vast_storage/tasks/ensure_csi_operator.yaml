@@ -6,7 +6,7 @@
 # Requires:
 #   _vast_required_protocols      — list of unique protocols from caller (e.g. ['nfs', 'block'])
 #   vast_storage_csi_provisioner_map — provider/protocol map passed by storage_provider
-#   vast_storage_csi_operator_*   — VAST OLM configuration from the provider matrix
+#   vast_storage_csi_operator_*   — pinned VAST OLM configuration from the provider matrix
 
 - name: Build list of expected CSI provisioner names from required protocols
   ansible.builtin.set_fact:
@@ -33,6 +33,38 @@
         | length > 0
       }}
 
+- name: Read existing VAST CSI Operator Subscription when drivers are already registered
+  when:
+    - not _vast_any_driver_missing
+    - vast_storage_csi_operator_install_override is not defined
+  kubernetes.core.k8s_info:
+    api_version: operators.coreos.com/v1alpha1
+    kind: Subscription
+    name: vast-csi-operator
+    namespace: "{{ vast_storage_csi_operator_namespace }}"
+  register: _vast_existing_csi_operator_subscription
+
+- name: Change existing VAST Subscription to Manual InstallPlan approval
+  when:
+    - not _vast_any_driver_missing
+    - vast_storage_csi_operator_install_override is not defined
+    - _vast_existing_csi_operator_subscription.resources | default([]) | length > 0
+  kubernetes.core.k8s:
+    state: patched
+    definition:
+      apiVersion: operators.coreos.com/v1alpha1
+      kind: Subscription
+      metadata:
+        name: vast-csi-operator
+        namespace: "{{ vast_storage_csi_operator_namespace }}"
+      spec:
+        channel: "{{ vast_storage_csi_operator_channel }}"
+        name: vast-csi-operator
+        source: "{{ vast_storage_csi_operator_catalog_source }}"
+        sourceNamespace: "{{ vast_storage_csi_operator_catalog_namespace }}"
+        startingCSV: "{{ vast_storage_csi_operator_starting_csv }}"
+        installPlanApproval: "{{ vast_storage_csi_operator_approval }}"
+
 - name: Log CSI drivers already installed
   when: not _vast_any_driver_missing
   ansible.builtin.debug:
@@ -48,8 +80,9 @@
   vars:
     native_csi_driver_install_tiers: "{{ _provider_tiers }}"
     native_csi_driver_names: "{{ _vast_required_provisioners }}"
-    native_csi_driver_version_selector: "{{ vast_storage_csi_operator_version_policy }}"
-    native_csi_driver_version: "latest-in-stable-channel"
+    native_csi_driver_version_selector: "{{ vast_storage_csi_operator_starting_csv }}"
+    native_csi_driver_version: "{{ vast_storage_csi_operator_starting_csv }}"
+    native_csi_driver_install_plan_approval: "{{ vast_storage_csi_operator_approval }}"
 
 - name: Install VAST CSI Operator via OLM (covers all protocols with single subscription)
   when:
@@ -118,7 +151,81 @@
             name: vast-csi-operator
             source: "{{ vast_storage_csi_operator_catalog_source }}"
             sourceNamespace: "{{ vast_storage_csi_operator_catalog_namespace }}"
+            startingCSV: "{{ vast_storage_csi_operator_starting_csv }}"
             installPlanApproval: "{{ vast_storage_csi_operator_approval }}"
+
+    - name: Wait for OLM to resolve the pinned VAST Operator CSV
+      kubernetes.core.k8s_info:
+        api_version: operators.coreos.com/v1alpha1
+        kind: Subscription
+        name: vast-csi-operator
+        namespace: "{{ vast_storage_csi_operator_namespace }}"
+      register: _vast_csi_operator_subscription
+      retries: 30
+      delay: 10
+      until: >-
+        _vast_csi_operator_subscription.resources | length > 0
+        and (
+          (_vast_csi_operator_subscription.resources[0].status.installedCSV | default(''))
+          == vast_storage_csi_operator_starting_csv
+          or _vast_csi_operator_subscription.resources[0].status.installPlanRef.name is defined
+        )
+
+    - name: Determine whether the pinned VAST Operator CSV is already installed
+      ansible.builtin.set_fact:
+        _vast_csi_operator_csv_installed: >-
+          {{ _vast_csi_operator_subscription.resources[0].status.installedCSV | default('')
+             == vast_storage_csi_operator_starting_csv }}
+
+    - name: Wait for the VAST Operator InstallPlan
+      when: not (_vast_csi_operator_csv_installed | bool)
+      kubernetes.core.k8s_info:
+        api_version: operators.coreos.com/v1alpha1
+        kind: InstallPlan
+        name: "{{ _vast_csi_operator_subscription.resources[0].status.installPlanRef.name }}"
+        namespace: "{{ vast_storage_csi_operator_namespace }}"
+      register: _vast_csi_operator_install_plan
+      retries: 30
+      delay: 10
+      until: _vast_csi_operator_install_plan.resources | length > 0
+
+    - name: Fail if the VAST Operator InstallPlan does not contain the pinned CSV
+      when:
+        - not (_vast_csi_operator_csv_installed | bool)
+        - vast_storage_csi_operator_starting_csv not in
+          _vast_csi_operator_install_plan.resources[0].spec.clusterServiceVersionNames
+      ansible.builtin.fail:
+        msg: >-
+          The VAST InstallPlan does not contain the pinned CSV
+          '{{ vast_storage_csi_operator_starting_csv }}'.
+
+    - name: Approve the VAST Operator InstallPlan for the pinned CSV
+      when:
+        - not (_vast_csi_operator_csv_installed | bool)
+        - not (_vast_csi_operator_install_plan.resources[0].spec.approved | default(false) | bool)
+      kubernetes.core.k8s:
+        state: patched
+        definition:
+          apiVersion: operators.coreos.com/v1alpha1
+          kind: InstallPlan
+          metadata:
+            name: "{{ _vast_csi_operator_install_plan.resources[0].metadata.name }}"
+            namespace: "{{ vast_storage_csi_operator_namespace }}"
+          spec:
+            approved: true
+
+    - name: Wait for the pinned VAST Operator CSV to succeed
+      kubernetes.core.k8s_info:
+        api_version: operators.coreos.com/v1alpha1
+        kind: ClusterServiceVersion
+        name: "{{ vast_storage_csi_operator_starting_csv }}"
+        namespace: "{{ vast_storage_csi_operator_namespace }}"
+      register: _vast_csi_operator_csv
+      retries: 30
+      delay: 10
+      until: >-
+        _vast_csi_operator_csv.resources | length > 0
+        and _vast_csi_operator_csv.resources[0].status.phase == 'Succeeded'
 
     - name: Wait for VastCSIDriver CRD to be available
       kubernetes.core.k8s_info:

@@ -177,7 +177,7 @@
                   agent-install.openshift.io/clusterdeployment-namespace: ""
               spec: {}
 
-        - name: Wait until both unbound Agents are removed from the hosted cluster
+        - name: Wait until the unbound-Agent count confirms the claimed Agent is preserved
           ansible.builtin.include_role:
             name: osac.service.manage_agents
             tasks_from: wait_for_agents_to_be_removed.yml

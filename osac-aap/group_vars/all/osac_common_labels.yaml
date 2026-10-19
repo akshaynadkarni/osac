@@ -8,6 +8,3 @@ compute_instance_osac_finalizer: "osac.openshift.io/computeinstance-aap"
 agent_instance_type_label: "osac.openshift.io/instance_type"
 agent_node_set_label: "osac.openshift.io/node-set"
 agent_host_uuid_label: "osac.openshift.io/host_uuid"
-agent_unbound_jmespath_query: >-
-  [?metadata.labels."agent-install.openshift.io/clusterdeployment-namespace"==`null`
-  || metadata.labels."agent-install.openshift.io/clusterdeployment-namespace"==``]

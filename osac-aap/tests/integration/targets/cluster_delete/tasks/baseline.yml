@@ -146,9 +146,7 @@
                   osac.openshift.io/clusterorder: manage-agents-wait-test
                   osac.openshift.io/instance_type: test-class
                   agent-install.openshift.io/clusterdeployment-namespace: cluster-wait-test
-                  nico-instance-id: nic-claimed
-              spec:
-                hostname: host-claimed
+              spec: {}
 
         - name: Create an unbound Agent without a deployment-namespace label
           kubernetes.core.k8s:
@@ -162,9 +160,7 @@
                 labels:
                   osac.openshift.io/clusterorder: manage-agents-wait-test
                   osac.openshift.io/instance_type: test-class
-                  nico-instance-id: nic-old-null
-              spec:
-                hostname: host-old-null
+              spec: {}
 
         - name: Create an unbound Agent with an empty deployment-namespace label
           kubernetes.core.k8s:
@@ -179,25 +175,7 @@
                   osac.openshift.io/clusterorder: manage-agents-wait-test
                   osac.openshift.io/instance_type: test-class
                   agent-install.openshift.io/clusterdeployment-namespace: ""
-                  nico-instance-id: nic-old-empty
-              spec:
-                hostname: host-old-empty
-
-        - name: Create a new unbound Agent that was not in the NICo pre-snapshot
-          kubernetes.core.k8s:
-            state: present
-            definition:
-              apiVersion: agent-install.openshift.io/v1beta1
-              kind: Agent
-              metadata:
-                name: manage-agents-wait-new-unbound
-                namespace: hardware-inventory
-                labels:
-                  osac.openshift.io/clusterorder: manage-agents-wait-test
-                  osac.openshift.io/instance_type: test-class
-                  nico-instance-id: nic-new
-              spec:
-                hostname: host-new
+              spec: {}
 
         - name: Wait until both unbound Agents are removed from the hosted cluster
           ansible.builtin.include_role:
@@ -211,92 +189,21 @@
         - name: Assert the removal wait selected exactly the unbound Agents
           ansible.builtin.assert:
             that:
-              - manage_agents_removed_count | int == 3
-              - manage_agents_allocated.resources | length == 4
+              - manage_agents_removed_count | int == 2
+              - manage_agents_allocated.resources | length == 3
               - >-
                 (
                   manage_agents_allocated.resources
-                  | json_query(agent_unbound_jmespath_query)
+                  | json_query(
+                      '[?metadata.labels."agent-install.openshift.io/clusterdeployment-namespace"==`null` '
+                      ~ '|| metadata.labels."agent-install.openshift.io/clusterdeployment-namespace"==``]'
+                    )
                   | map(attribute='metadata.name') | sort | list
                 ) == [
-                  'manage-agents-wait-new-unbound',
                   'manage-agents-wait-unbound-empty',
                   'manage-agents-wait-unbound-null'
                 ]
-            success_msg: "The removal wait selected the three unbound Agents and excluded the claimed Agent"
-
-        - name: Read all NICo test Agents by cluster label
-          kubernetes.core.k8s_info:
-            api_version: agent-install.openshift.io/v1beta1
-            kind: Agent
-            namespace: hardware-inventory
-            label_selectors:
-              - "osac.openshift.io/clusterorder=manage-agents-wait-test"
-          register: nico_allocated_agents
-
-        - name: Set the pre-existing NICo Agent snapshot
-          ansible.builtin.set_fact:
-            pre_nico_agent_names:
-              - manage-agents-wait-claimed
-              - manage-agents-wait-unbound-null
-              - manage-agents-wait-unbound-empty
-            nico_total_desired_nodes: 1
-
-        - name: Run the production NICo scale-down selection transform
-          ansible.builtin.include_tasks: >-
-            ../../../../../collections/ansible_collections/nico/steps/roles/cluster_infra/tasks/261018-2344-select_removed_agents.yaml
-
-        - name: Assert NICo selected only pre-existing unbound instance IDs
-          ansible.builtin.assert:
-            that:
-              - >-
-                nico_removed_agents | map(attribute='metadata.name') | sort | list
-                == ['manage-agents-wait-unbound-empty', 'manage-agents-wait-unbound-null']
-              - nico_removed_instance_ids | sort == ['nic-old-empty', 'nic-old-null']
-              - nico_removed_agent_hostnames | sort == ['host-old-empty', 'host-old-null']
-
-        - name: Detach and unlabel the NICo Agents selected for removal
-          ansible.builtin.include_role:
-            name: osac.service.manage_agents
-            tasks_from: detach_and_unlabel_all_removed_agents.yml
-          vars:
-            manage_agents_cluster_order_name: manage-agents-wait-test
-            manage_agents_idle_agents_network: idle-test
-            manage_agents_skip_network_detach: true
-            manage_agents_protected_agents:
-              - manage-agents-wait-new-unbound
-
-        - name: Read the claimed Agent after NICo detach
-          kubernetes.core.k8s_info:
-            api_version: agent-install.openshift.io/v1beta1
-            kind: Agent
-            name: manage-agents-wait-claimed
-            namespace: hardware-inventory
-          register: _manage_agents_claimed_after_detach
-
-        - name: Read an old unbound Agent after NICo detach
-          kubernetes.core.k8s_info:
-            api_version: agent-install.openshift.io/v1beta1
-            kind: Agent
-            name: manage-agents-wait-unbound-null
-            namespace: hardware-inventory
-          register: _manage_agents_old_unbound_after_detach
-
-        - name: Read the protected newly-created Agent after NICo detach
-          kubernetes.core.k8s_info:
-            api_version: agent-install.openshift.io/v1beta1
-            kind: Agent
-            name: manage-agents-wait-new-unbound
-            namespace: hardware-inventory
-          register: _manage_agents_new_unbound_after_detach
-
-        - name: Assert NICo detach preserved claimed/protected labels and removed stale labels
-          ansible.builtin.assert:
-            that:
-              - _manage_agents_claimed_after_detach.resources[0].metadata.labels[cluster_order_label] == 'manage-agents-wait-test'
-              - cluster_order_label not in _manage_agents_old_unbound_after_detach.resources[0].metadata.labels
-              - _manage_agents_new_unbound_after_detach.resources[0].metadata.labels[cluster_order_label] == 'manage-agents-wait-test'
-            success_msg: "NICo detached and unlabelled only pre-existing agents selected for removal"
+            success_msg: "The removal wait recognized null and empty deployment-namespace labels"
       always:
         - name: Remove the Agent fixtures
           kubernetes.core.k8s:
@@ -309,7 +216,6 @@
             - manage-agents-wait-claimed
             - manage-agents-wait-unbound-null
             - manage-agents-wait-unbound-empty
-            - manage-agents-wait-new-unbound
           failed_when: false
 
         - name: Remove the Agent CRD created by this test

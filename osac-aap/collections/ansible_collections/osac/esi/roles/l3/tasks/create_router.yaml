@@ -27,43 +27,9 @@
       ansible.builtin.set_fact:
         create_router_result: "{{ (router_cmd_result.stdout | from_json).id }}"
 
-- name: Get router ports
-  openstack.cloud.port_info:
-    filters:
-      device_id: "{{ create_router_result }}"
-  register: router_ports
-
-- name: Set attached router subnet IDs
-  ansible.builtin.set_fact:
-    attached_router_subnet_ids: >-
-      {{
-        router_ports.ports
-        | selectattr('device_owner', 'equalto', 'network:router_interface')
-        | map(attribute='fixed_ips')
-        | flatten
-        | map(attribute='subnet_id')
-        | list
-      }}
-
-- name: Get requested router subnet information
-  openstack.cloud.subnets_info:
-    name: "{{ item }}"
-  loop: "{{ router_subnets | default([]) | unique }}"
-  register: router_subnets_info
-
-- name: Verify each requested router subnet resolves to exactly one subnet
-  ansible.builtin.assert:
-    that:
-      - item.subnets | length == 1
-    fail_msg: >-
-      Requested router subnet '{{ item.item }}' must resolve to exactly one
-      subnet.
-  loop: "{{ router_subnets_info.results }}"
-
-- name: Add subnets to router # noqa:no-changed-when
-  ansible.builtin.command: >-
-    openstack router add subnet "{{ router_name }}" "{{ item.item }}"
-  loop: "{{ router_subnets_info.results | unique(attribute='subnets.0.id') }}"
-  when: item.subnets[0].id not in attached_router_subnet_ids
-  register: router_add_subnet_result
-  failed_when: router_add_subnet_result.rc != 0
+    - name: Add subnets to router # noqa:no-changed-when
+      ansible.builtin.command: >-
+        openstack router add subnet "{{ router_name }}" "{{ item }}"
+      loop: "{{ router_subnets }}"
+      register: router_add_subnet_result
+      failed_when: router_add_subnet_result.rc != 0

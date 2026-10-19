@@ -1,3 +1,4 @@
+---
 argument_specs:
   wait_for_dns:
     options:

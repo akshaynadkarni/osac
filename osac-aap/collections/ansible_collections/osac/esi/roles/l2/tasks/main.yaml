@@ -1,3 +1,4 @@
+---
 - name: Create a new network
   when: network_state == 'present'
   ansible.builtin.include_tasks: create_network.yaml

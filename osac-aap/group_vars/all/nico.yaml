@@ -1,3 +1,4 @@
+---
 # Infrastructure Defaults
 nico_infra_configmap_namespace: "{{ lookup('env', 'NVIDIA_BMM_CONFIGMAP_NAMESPACE') | default('hardware-inventory', true) }}"
 nico_infra_vpc_name_prefix: "{{ lookup('env', 'NVIDIA_BMM_VPC_NAME_PREFIX') | default('osac-vpc', true) }}"

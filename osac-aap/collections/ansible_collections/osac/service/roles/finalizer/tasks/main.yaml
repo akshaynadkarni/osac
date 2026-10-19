@@ -1,3 +1,4 @@
+---
 - name: Look up finalizer target
   kubernetes.core.k8s_info:
     api_version: "{{ finalizer_target.api_version }}"

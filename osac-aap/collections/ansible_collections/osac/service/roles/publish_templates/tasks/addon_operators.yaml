@@ -1,3 +1,4 @@
+---
 - name: Get existing AddOnOperators
   ansible.builtin.uri:
     url: "{{ publish_templates_addon_operator_api_endpoint }}"

@@ -1,3 +1,4 @@
+---
 - name: Enumerate cluster templates
   ansible.builtin.set_fact:
     osac_cluster_templates: "{{ osac_template_collections | osac.service.find_cluster_template_roles }}"

@@ -1,3 +1,4 @@
+---
 - name: Get list of existing ComputeInstance templates
   ansible.builtin.uri:
     url: "{{ publish_templates_compute_instance_api_endpoint }}"

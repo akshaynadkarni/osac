@@ -1,3 +1,4 @@
+---
 # Leave the HostedCluster, guest credentials and ManagedCluster in place while
 # CAP-Agent unbinds Agents. The baremetalworker controller only deletes each
 # worker BMI after its Agent has unbound. Skip drain only on terminal cluster

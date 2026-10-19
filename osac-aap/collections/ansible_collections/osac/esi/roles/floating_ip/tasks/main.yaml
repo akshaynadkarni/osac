@@ -1,3 +1,4 @@
+---
 - name: Allocate a new floating ip
   when: floating_ip_state == 'present'
   ansible.builtin.include_tasks: allocate_floating_ip.yaml

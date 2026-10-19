@@ -1,3 +1,4 @@
+---
 - name: Clean host # noqa:no-changed-when
   ansible.builtin.command: >-
     openstack baremetal node undeploy {{ host_name }}

@@ -1,3 +1,4 @@
+---
 - name: Detach agents from cluster
   ansible.builtin.include_role:
     name: osac.service.manage_agents

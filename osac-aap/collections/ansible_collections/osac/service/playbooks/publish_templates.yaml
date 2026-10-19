@@ -1,3 +1,4 @@
+---
 - name: Discover and publish templates to fulfillment service
   hosts: localhost
   gather_facts: false

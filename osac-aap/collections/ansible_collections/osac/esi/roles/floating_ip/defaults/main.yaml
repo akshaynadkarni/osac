@@ -1,3 +1,4 @@
+---
 floating_ip_network: external
 floating_ip_tags: []
 floating_ip_properties: {}

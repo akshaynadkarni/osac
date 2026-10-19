@@ -1,3 +1,4 @@
+---
 - name: Get node information
   openstack.cloud.baremetal_node_info:
     name: "{{ host_name }}"
@@ -24,4 +25,4 @@
   vars:
     node: "{{ host_name }}"
     networks:
-    - "{{ host_network }}"
+      - "{{ host_network }}"

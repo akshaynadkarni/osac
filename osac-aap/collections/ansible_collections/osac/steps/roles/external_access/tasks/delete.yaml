@@ -1,3 +1,4 @@
+---
 - name: Destroy floating ips
   ansible.builtin.include_role:
     name: osac.esi.floating_ip

@@ -1,3 +1,4 @@
+---
 - name: Show node requests
   ansible.builtin.debug:
     var: cluster_infra_node_requests
@@ -76,7 +77,12 @@
   loop: "{{ baremetalinstances_result.resources }}"
   when:
     - item.metadata.ownerReferences is defined
-    - item.metadata.ownerReferences | selectattr('controller', 'defined') | selectattr('controller', 'equalto', true) | selectattr('uid', 'equalto', baremetalpool_uid) | list | length > 0
+    - >-
+      item.metadata.ownerReferences
+      | selectattr('controller', 'defined')
+      | selectattr('controller', 'equalto', true)
+      | selectattr('uid', 'equalto', baremetalpool_uid)
+      | list | length > 0
     - item.spec.externalHostID is defined
     - item.spec.externalHostID != ''
 
@@ -148,7 +154,7 @@
   vars:
     node: "{{ item }}"
     networks:
-    - "{{ cluster_infra_network_name }}"
+      - "{{ cluster_infra_network_name }}"
   loop: "{{ allocated_host_ids }}"
   loop_control:
     label: "Attach host {{ item }}"

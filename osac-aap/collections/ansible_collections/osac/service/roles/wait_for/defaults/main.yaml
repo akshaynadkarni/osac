@@ -1,3 +1,4 @@
+---
 # The total DNS wait budget (wait_for_dns_retries * wait_for_dns_delay) must
 # exceed the zone's negative-cache (SOA minimum) TTL so that a record which
 # appears after an initial NXDOMAIN is still detected when querying a recursive

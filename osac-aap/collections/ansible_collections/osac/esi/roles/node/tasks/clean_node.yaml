@@ -1,3 +1,4 @@
+---
 - name: Undeploy node
   openstack.cloud.baremetal_node_action:
     name: "{{ node_name }}"

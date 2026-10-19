@@ -60,6 +60,7 @@
   gather_facts: false
   vars_files:
     - ../../../common_vars.yml
+    - ../../../../../group_vars/all/osac_common_labels.yaml
   vars:
     default_agent_namespace: hardware-inventory
     cluster_order_label: osac.openshift.io/clusterorder
@@ -215,10 +216,7 @@
               - >-
                 (
                   manage_agents_allocated.resources
-                  | json_query(
-                      '[?metadata.labels."agent-install.openshift.io/clusterdeployment-namespace"==`null` '
-                      ~ '|| metadata.labels."agent-install.openshift.io/clusterdeployment-namespace"==``]'
-                    )
+                  | json_query(agent_unbound_jmespath_query)
                   | map(attribute='metadata.name') | sort | list
                 ) == [
                   'manage-agents-wait-new-unbound',

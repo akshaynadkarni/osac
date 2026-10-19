@@ -12,10 +12,7 @@
   ansible.builtin.set_fact:
     manage_agents_removed: >-
       {{ manage_agents_allocated.resources
-         | json_query(
-             '[?metadata.labels."agent-install.openshift.io/clusterdeployment-namespace"==`null` '
-             ~ '|| metadata.labels."agent-install.openshift.io/clusterdeployment-namespace"==``]'
-           ) }}
+         | json_query(agent_unbound_jmespath_query) }}
 
 # Exclude agents that were just provisioned in this run and haven't been
 # claimed by a HostedCluster yet.  Without this filter, newly provisioned

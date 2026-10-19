@@ -32,10 +32,7 @@
       register: manage_agents_allocated
       until: >-
         (manage_agents_allocated.resources
-         | json_query(
-             '[?metadata.labels."agent-install.openshift.io/clusterdeployment-namespace"==`null` '
-             ~ '|| metadata.labels."agent-install.openshift.io/clusterdeployment-namespace"==``]'
-           )
+         | json_query(agent_unbound_jmespath_query)
          | length) >= manage_agents_removed_count | int
       retries: 40
       delay: 30

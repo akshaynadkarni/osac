@@ -1,4 +1,3 @@
----
 - name: Convert subnet properties to tags
   ansible.builtin.set_fact:
     tags_to_filter: "{{ tags_to_filter | default([]) + [item.key + '_' + item.value] }}"

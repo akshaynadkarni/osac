@@ -1,4 +1,3 @@
----
 - name: Get subnets by name
   openstack.cloud.subnets_info:
     name: "{{ subnet_name }}"

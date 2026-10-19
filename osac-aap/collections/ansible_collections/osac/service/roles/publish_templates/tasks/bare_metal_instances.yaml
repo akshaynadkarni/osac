@@ -1,4 +1,3 @@
----
 - name: Get list of existing BareMetalInstance templates
   ansible.builtin.uri:
     url: "{{ publish_templates_bare_metal_instance_api_endpoint }}"

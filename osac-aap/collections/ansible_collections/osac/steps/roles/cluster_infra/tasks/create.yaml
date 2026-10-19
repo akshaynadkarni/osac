@@ -1,4 +1,3 @@
----
 - name: Show node requests
   ansible.builtin.debug:
     var: cluster_infra_node_requests

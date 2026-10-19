@@ -1,4 +1,3 @@
----
 skip_list:
   - role-name[path]
   - parser-error # Known false positive: multi-play test playbooks trigger "conflicting action statements"

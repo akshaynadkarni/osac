@@ -1,4 +1,3 @@
----
 # By using service_side_apply and using a unique field manager, we ensure that
 # future attempts to create/modify this lock will fail (because of the conflict
 # setting spec.holderIdentity).

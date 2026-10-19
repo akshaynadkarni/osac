@@ -1,4 +1,3 @@
----
 - name: Extract template id
   when: >-
     template_id is not defined

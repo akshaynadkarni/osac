@@ -1,4 +1,3 @@
----
 netris_agent_server_name_label: "netris.server/name"
 
 server_ssh_bastion_key: "/tmp/.ssh/server-ssh-bastion-key"

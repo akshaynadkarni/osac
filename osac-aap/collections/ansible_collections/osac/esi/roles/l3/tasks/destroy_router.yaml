@@ -1,4 +1,3 @@
----
 - name: Check that exactly one router matching the ident exists # noqa:no-changed-when
   ansible.builtin.command: >-
     openstack router show {{ router_name }} -f json

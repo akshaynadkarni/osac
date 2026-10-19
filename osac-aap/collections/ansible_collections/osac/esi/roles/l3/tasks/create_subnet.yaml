@@ -1,4 +1,3 @@
----
 - name: Check if subnet exists
   openstack.cloud.subnets_info:
     name: "{{ subnet_name }}"

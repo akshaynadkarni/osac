@@ -1,4 +1,3 @@
----
 - name: Get list of existing cluster templates
   ansible.builtin.uri:
     url: "{{ publish_templates_cluster_api_endpoint }}"

@@ -1,4 +1,3 @@
----
 cluster_order_label: "osac.openshift.io/clusterorder"
 cluster_order_infrastructure_finalizer: "osac.openshift.io/infrastructure"
 

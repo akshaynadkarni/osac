@@ -1,2 +1,1 @@
----
 manage_agents_idle_agents_network: "{{ lookup('env', 'PARKING_VNET_NAME') | default('idle-agents-network', true) }}"

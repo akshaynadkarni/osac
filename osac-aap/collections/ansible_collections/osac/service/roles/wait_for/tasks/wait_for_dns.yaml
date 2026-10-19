@@ -1,4 +1,3 @@
----
 - name: Wait for DNS record {{ wait_for_dns_record }}
   ansible.builtin.command: >-
     dig {{ ('@' ~ wait_for_dns_server) if (wait_for_dns_server | default('') | length > 0) else '' }}

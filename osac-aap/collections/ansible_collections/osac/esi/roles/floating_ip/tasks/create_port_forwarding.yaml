@@ -1,4 +1,3 @@
----
 - name: Purge port forwardings
   ansible.builtin.command: >-
     openstack esi port forwarding purge {{ floating_ip }} -f json

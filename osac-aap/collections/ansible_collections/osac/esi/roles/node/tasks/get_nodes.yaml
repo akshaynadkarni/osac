@@ -1,4 +1,3 @@
----
 - name: Get node informations
   openstack.cloud.baremetal_node_info:
   register: node_info_result

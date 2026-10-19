@@ -1,4 +1,3 @@
----
 dns_ttl: 1800
 default_agent_namespace: &agent_namespace >-
   {{ (osac_job_vars.resource.metadata.namespace | default(''))

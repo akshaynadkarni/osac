@@ -1,4 +1,3 @@
----
 apiVersion: osac.openshift.io/v1alpha1
 kind: ComputeInstance
 metadata:

@@ -1,4 +1,3 @@
----
 - name: Set dns names
   ansible.builtin.set_fact:
     external_access_api_domain: "api.{{ external_access_name }}.{{ external_access_base_domain }}"

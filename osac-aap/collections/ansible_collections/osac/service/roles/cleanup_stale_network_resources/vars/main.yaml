@@ -1,4 +1,3 @@
----
 cleanup_stale_network_resources_stale_networks: []
 cleanup_stale_network_resources_stale_floating_ips: []
 cleanup_stale_network_resources_stale_routers: []

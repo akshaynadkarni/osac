@@ -1,4 +1,3 @@
----
 - name: Convert network properties to tags
   ansible.builtin.set_fact:
     network_tags: "{{ network_tags + [item.key + '_' + item.value] }}"

@@ -1,4 +1,3 @@
----
 # This playbook follows the bare-metal ingress guidance:
 # https://docs.redhat.com/en/documentation/openshift_container_platform/4.19/html/hosted_control_planes/managing-hosted-control-planes#hcp-bm-ingress_hcp-manage-bm
 

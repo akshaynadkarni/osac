@@ -19,7 +19,7 @@ see [Configuring an external Kafka cluster](guides/installation/kafka-configurat
 
 - [Ethernet FabricDomains](guides/admin/fabric-domains.md): hardware bindings,
   inventory onboarding, membership changes, cleanup, and troubleshooting.
-- [Storage](storage/): concepts and configuration for tenant storage —
+- [Storage](storage/): concepts and configuration for tenant storage:
   StorageBackends, StorageTiers, ownership models, tenancy models, provider
   integrations, and tenant onboarding.
 
